@@ -13,7 +13,7 @@
 //
 //   - null/undefined — leave the host DOM untouched (enhance mode).
 
-import { render } from 'lit-html';
+import { render } from '../vendor/lit-html/lit-html.js';
 import { Signal } from './signal.js';
 import { effect } from './effect.js';
 import { withScope } from './scope.js';
@@ -28,7 +28,10 @@ import { withScope } from './scope.js';
  * @property {readonly string[]} [props]
  */
 
-/** @param {ComponentSpec} spec */
+/**
+ * @param {ComponentSpec} spec
+ * @returns {CustomElementConstructor}
+ */
 export function defineComponent({ tag, setup, shadow = false, props = [] }) {
   /** @type {WeakMap<HTMLElement, Record<string, InstanceType<typeof Signal.State<unknown>>>>} */
   const propBags = new WeakMap();
@@ -71,6 +74,13 @@ export function defineComponent({ tag, setup, shadow = false, props = [] }) {
           /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */ (propBags.get(this) ?? {}),
           emit,
         );
+
+        // setup() ran BEFORE this clear so it can read fallback children
+        // (the no-JS hydration pattern). Once we know setup returned a
+        // view, we own the DOM and replace any pre-existing fallback.
+        if (view != null) {
+          while (root.firstChild) root.removeChild(root.firstChild);
+        }
 
         if (typeof view === 'function') {
           // Reactive path: each signal read inside the render fn becomes

@@ -29,8 +29,8 @@ dispose();
 // withScope is generic in the callback return type.
 const scoped: string = withScope({ signal: ctrl.signal }, () => 'ok');
 
-// html returns a DocumentFragment.
-const frag: DocumentFragment = html`<p>${count}</p>`;
+// html returns a TemplateResult (from lit-html).
+const frag = html`<p>${count.get()}</p>`;
 
 // defineComponent accepts a setup that returns Node/Fragment/null.
 defineComponent({

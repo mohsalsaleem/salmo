@@ -12,16 +12,15 @@ if (g[MARKER]) {
   g[MARKER] = true;
 }
 
-// === From lit-html: templating + standard directives. ===
-// We re-export the bare names so consumer code uses the same import
-// regardless of substrate. If we ever swap engines, this is the one
-// place that changes.
-export { html, render, svg, nothing } from 'lit-html';
-export { repeat } from 'lit-html/directives/repeat.js';
-export { when } from 'lit-html/directives/when.js';
-export { classMap } from 'lit-html/directives/class-map.js';
-export { ref } from 'lit-html/directives/ref.js';
-export { unsafeHTML } from 'lit-html/directives/unsafe-html.js';
+// === From lit-html (vendored under framework/vendor/lit-html/). ===
+// Relative paths so consumers don't need an import map — just load
+// /framework/src/index.js and everything resolves.
+export { html, render, svg, nothing } from '../vendor/lit-html/lit-html.js';
+export { repeat } from '../vendor/lit-html/directives/repeat.js';
+export { when } from '../vendor/lit-html/directives/when.js';
+export { classMap } from '../vendor/lit-html/directives/class-map.js';
+export { ref } from '../vendor/lit-html/directives/ref.js';
+export { unsafeHTML } from '../vendor/lit-html/directives/unsafe-html.js';
 
 // === Ours: the parts Lit doesn't provide or that we want to control. ===
 export { Signal } from './signal.js';

@@ -23,6 +23,8 @@
 // something different than you expected); they do NOT sandbox the
 // remote once it has loaded. See SECURITY.md.
 
+import { render as litRender } from '../vendor/lit-html/lit-html.js';
+
 /** @typedef {Object} LazySpec
  *  @property {string} tag              Tag the placeholder registers under.
  *  @property {string} src              Module URL to import().
@@ -47,8 +49,13 @@ export function lazyComponent({ tag, src, as, fallback, integrity, allowedOrigin
   class LazyElement extends HTMLElement {
     connectedCallback() {
       if (fallback) {
-        const node = fallback();
-        if (node) this.append(node);
+        const out = fallback();
+        // Accept either a DOM node or a lit-html TemplateResult.
+        if (out && typeof (/** @type {any} */ (out).nodeType) === 'number') {
+          this.append(/** @type {Node} */ (out));
+        } else if (out) {
+          litRender(/** @type {any} */ (out), this);
+        }
       }
 
       let p = inFlight.get(src);
