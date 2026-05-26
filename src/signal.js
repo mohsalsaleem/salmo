@@ -25,10 +25,12 @@ class State {
   }
 
   set(value) {
+    if (Object.is(value, this.#value)) return;
     this.#value = value;
     for (const sub of [...this.#subs]) sub._markDirty();
   }
 
+  _addSub(sub) { this.#subs.add(sub); }
   _removeSub(sub) { this.#subs.delete(sub); }
 }
 
@@ -69,7 +71,52 @@ class Computed {
     for (const sub of [...this.#subs]) sub._markDirty();
   }
 
+  _isDirty() { return this.#dirty; }
+  _addSub(sub) { this.#subs.add(sub); }
   _removeSub(sub) { this.#subs.delete(sub); }
 }
 
-export const Signal = { State, Computed };
+class Watcher {
+  #notify;
+  #armed = true;
+  #watching = new Set();
+
+  constructor(notify) { this.#notify = notify; }
+
+  watch(...signals) {
+    if (signals.length === 0) {
+      this.#armed = true;
+      return;
+    }
+    for (const s of signals) {
+      this.#watching.add(s);
+      s._addSub(this);
+    }
+  }
+
+  unwatch(...signals) {
+    for (const s of signals) {
+      this.#watching.delete(s);
+      s._removeSub(this);
+    }
+  }
+
+  getPending() {
+    return [...this.#watching].filter(s => s._isDirty?.());
+  }
+
+  _markDirty() {
+    if (!this.#armed) return;
+    this.#armed = false;
+    // Per the proposal: notify runs in an untracked context.
+    const prev = currentObserver;
+    currentObserver = null;
+    try { this.#notify(); }
+    finally { currentObserver = prev; }
+  }
+
+  // Watchers are never themselves observed.
+  _addDep() {}
+}
+
+export const Signal = { State, Computed, subtle: { Watcher } };
