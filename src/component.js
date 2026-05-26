@@ -58,12 +58,26 @@ export function defineComponent({ tag, setup, shadow = false, props = [] }) {
     /** @type {boolean} */
     #owned = false;
 
+    // Declared so attribute mutations (including those present at
+    // parse-time, like server-rendered <x-counter initial="42">) sync
+    // into the prop signal. Attribute values are strings — that's the
+    // SSR contract; rich values come in via property bindings.
+    static get observedAttributes() { return props; }
+
     constructor() {
       super();
       /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */
       const bag = {};
-      for (const name of props) bag[name] = new Signal.State(/** @type {unknown} */ (undefined));
+      for (const name of props) {
+        const initial = this.hasAttribute(name) ? this.getAttribute(name) : undefined;
+        bag[name] = new Signal.State(/** @type {unknown} */ (initial));
+      }
       propBags.set(this, bag);
+    }
+
+    /** @param {string} name @param {string|null} _old @param {string|null} value */
+    attributeChangedCallback(name, _old, value) {
+      propBags.get(this)?.[name]?.set(value);
     }
 
     connectedCallback() {

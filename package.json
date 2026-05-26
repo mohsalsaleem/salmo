@@ -10,6 +10,9 @@
     ".": {
       "types": "./types/index.d.ts",
       "import": "./src/index.js"
+    },
+    "./ssr": {
+      "import": "./src/ssr.js"
     }
   },
   "scripts": {

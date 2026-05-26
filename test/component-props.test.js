@@ -111,6 +111,37 @@ describe('defineComponent props', () => {
     parent.remove();
   });
 
+  it('reads initial prop values from HTML attributes (for SSR-rendered markup)', () => {
+    defineComponent({
+      tag: 'x-ssr-attr',
+      props: ['initial'],
+      setup: (_h, props) => html`<span>${() => props.initial.get()}</span>`,
+    });
+    // Create with an attribute, as if parsed from server-rendered HTML.
+    const host = document.createElement('x-ssr-attr');
+    host.setAttribute('initial', '42');
+    document.body.append(host);
+    expect(host.querySelector('span').textContent).toBe('42');
+    host.remove();
+  });
+
+  it('updates prop signal when attribute changes (observedAttributes wiring)', async () => {
+    defineComponent({
+      tag: 'x-attr-watch',
+      props: ['label'],
+      setup: (_h, props) => html`<span>${() => props.label.get()}</span>`,
+    });
+    const host = document.createElement('x-attr-watch');
+    host.setAttribute('label', 'one');
+    document.body.append(host);
+    expect(host.querySelector('span').textContent).toBe('one');
+
+    host.setAttribute('label', 'two');
+    await tick();
+    expect(host.querySelector('span').textContent).toBe('two');
+    host.remove();
+  });
+
   it('emit(type, detail) is the third setup arg; dispatches a bubbling CustomEvent on host', () => {
     let captured;
     defineComponent({
