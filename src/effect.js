@@ -45,12 +45,25 @@ export function effect(fn, { signal } = {}) {
   w.watch(c);
   c.get();                   // initial run
 
+  // Listener captured separately so manual dispose can detach it from
+  // the AbortSignal — otherwise a long-lived AbortController would
+  // retain the effect's closure (Watcher, Computed, scheduled flags)
+  // even after the user disposed.
+  /** @type {(() => void) | null} */
+  let onAbort = null;
   const dispose = () => {
     if (disposed) return;
     disposed = true;
     w.unwatch(c);
+    if (onAbort && signal) {
+      signal.removeEventListener('abort', onAbort);
+      onAbort = null;
+    }
   };
 
-  signal?.addEventListener('abort', dispose, { once: true });
+  if (signal) {
+    onAbort = dispose;
+    signal.addEventListener('abort', onAbort, { once: true });
+  }
   return dispose;
 }

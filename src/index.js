@@ -42,9 +42,9 @@ export function configure({ singletonViolation } = {}) {
   }
 }
 
-// === From lit-html (vendored under framework/vendor/lit-html/). ===
+// === From lit-html (vendored under vendor/lit-html/). ===
 // Relative paths so consumers don't need an import map — just load
-// /framework/src/index.js and everything resolves.
+// src/index.js and everything resolves.
 export { html, render, svg, nothing } from '../vendor/lit-html/lit-html.js';
 export { repeat } from '../vendor/lit-html/directives/repeat.js';
 export { when } from '../vendor/lit-html/directives/when.js';

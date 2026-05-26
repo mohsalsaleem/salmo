@@ -27,8 +27,20 @@ export async function setupDOM() {
   const g = globalThis;
   if (g.document && g.customElements) return g.window; // already set up
 
-  // happy-dom is a dev-time dependency; only required when SSRing on Node.
-  const { Window } = await import('happy-dom');
+  // happy-dom is an optional peer dependency — only required when SSRing
+  // on Node. Wrap the dynamic import so consumers get an actionable
+  // error rather than a generic ERR_MODULE_NOT_FOUND.
+  /** @type {any} */ let mod;
+  try {
+    mod = await import('happy-dom');
+  } catch (err) {
+    throw new Error(
+      "salmo/ssr requires happy-dom to install browser globals on Node. " +
+      "Install it as a peer: `npm install happy-dom`. " +
+      `(underlying error: ${err instanceof Error ? err.message : String(err)})`,
+    );
+  }
+  const { Window } = mod;
   const window = new Window();
   for (const key of [
     'window', 'document', 'navigator', 'location',
@@ -52,6 +64,12 @@ export async function setupDOM() {
 /**
  * Render a top-level Custom Element tag to its serialized HTML string,
  * having run connectedCallback (so any html`` content is materialised).
+ *
+ * Sync snapshot only. Microtasks queued during the initial render (e.g.
+ * any reactive re-render triggered by a signal mutated inside setup)
+ * have not yet run when `outerHTML` is read. Components whose first
+ * render is synchronous render fully; async directives or post-setup
+ * signal updates will not appear in the output.
  *
  * Caller is responsible for defining the component before calling this.
  *

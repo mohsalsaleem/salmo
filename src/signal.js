@@ -46,6 +46,25 @@ function assertNotInNotify(op) {
   }
 }
 
+// Subscribers are held weakly so a Computed that no Watcher keeps alive
+// can be garbage-collected, releasing the State/Computed entries in its
+// upstream subscriber sets. Matches the TC39 polyfill's WeakRef strategy.
+// `live(subs)` snapshots, derefs, and prunes dead refs in one pass so the
+// caller iterates live Subscribers.
+/**
+ * @param {Set<WeakRef<Subscriber>>} subs
+ * @returns {Subscriber[]}
+ */
+function live(subs) {
+  /** @type {Subscriber[]} */ const out = [];
+  for (const ref of [...subs]) {
+    const sub = ref.deref();
+    if (sub) out.push(sub);
+    else subs.delete(ref);
+  }
+  return out;
+}
+
 // Lifecycle hook symbols. Users pass functions under these keys in a
 // signal's options bag to be notified when the signal goes live (has
 // at least one transitive Watcher) or stops being live.
@@ -64,8 +83,10 @@ const unwatchedSymbol = Symbol('Signal.subtle.unwatched');
 class State {
   /** @type {T} */
   #value;
-  /** @type {Set<Subscriber>} */
+  /** @type {Set<WeakRef<Subscriber>>} */
   #subs = new Set();
+  /** @type {WeakMap<Subscriber, WeakRef<Subscriber>>} */
+  #subRefs = new WeakMap();
   /** @type {(a: T, b: T) => boolean} */
   #equals;
   #version = 0;
@@ -98,7 +119,7 @@ class State {
   get() {
     assertNotInNotify('read');
     if (currentObserver) {
-      this.#subs.add(currentObserver);
+      this._addSub(currentObserver);
       currentObserver._trackDep?.(this, this.#version);
     }
     return this.#value;
@@ -110,13 +131,23 @@ class State {
     if (this.#equals.call(this, this.#value, value)) return;
     this.#value = value;
     this.#version++;
-    for (const sub of [...this.#subs]) sub._notify(DIRTY);
+    for (const sub of live(this.#subs)) sub._notify(DIRTY);
   }
 
   // Internal source interface ---------------------------------------------
-  /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
-  /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
-  _subsArray() { return [...this.#subs]; }
+  /** @param {Subscriber} sub */ _addSub(sub) {
+    if (this.#subRefs.has(sub)) return;
+    const ref = new WeakRef(sub);
+    this.#subRefs.set(sub, ref);
+    this.#subs.add(ref);
+  }
+  /** @param {Subscriber} sub */ _removeSub(sub) {
+    const ref = this.#subRefs.get(sub);
+    if (!ref) return;
+    this.#subRefs.delete(sub);
+    this.#subs.delete(ref);
+  }
+  _subsArray() { return live(this.#subs); }
   _hasSubs() { return this.#liveCount > 0; }
   _version() { return this.#version; }
   _isLive() { return this.#liveCount > 0; }
@@ -143,8 +174,10 @@ class Computed {
   #state = DIRTY;
   /** @type {Map<Source, number>} */
   #deps = new Map();
-  /** @type {Set<Subscriber>} */
+  /** @type {Set<WeakRef<Subscriber>>} */
   #subs = new Set();
+  /** @type {WeakMap<Subscriber, WeakRef<Subscriber>>} */
+  #subRefs = new WeakMap();
   #liveCount = 0;
   /** @type {((this: Computed<T>) => void) | undefined} */ #onWatched;
   /** @type {((this: Computed<T>) => void) | undefined} */ #onUnwatched;
@@ -182,7 +215,7 @@ class Computed {
     assertNotInNotify('read');
     this.#validate();
     if (currentObserver) {
-      this.#subs.add(currentObserver);
+      this._addSub(currentObserver);
       currentObserver._trackDep?.(this, this.#version);
     }
     if (this.#hasError) throw this.#error;
@@ -297,12 +330,12 @@ class Computed {
       const wasClean = this.#state === CLEAN;
       this.#state = DIRTY;
       if (wasClean) {
-        for (const sub of [...this.#subs]) sub._notify(CHECK);
+        for (const sub of live(this.#subs)) sub._notify(CHECK);
       }
     } else {
       if (this.#state !== CLEAN) return;
       this.#state = CHECK;
-      for (const sub of [...this.#subs]) sub._notify(CHECK);
+      for (const sub of live(this.#subs)) sub._notify(CHECK);
     }
   }
 
@@ -310,9 +343,19 @@ class Computed {
   _trackDep(source, version) { this.#deps.set(source, version); }
 
   // Source interface ------------------------------------------------------
-  /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
-  /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
-  _subsArray() { return [...this.#subs]; }
+  /** @param {Subscriber} sub */ _addSub(sub) {
+    if (this.#subRefs.has(sub)) return;
+    const ref = new WeakRef(sub);
+    this.#subRefs.set(sub, ref);
+    this.#subs.add(ref);
+  }
+  /** @param {Subscriber} sub */ _removeSub(sub) {
+    const ref = this.#subRefs.get(sub);
+    if (!ref) return;
+    this.#subRefs.delete(sub);
+    this.#subs.delete(ref);
+  }
+  _subsArray() { return live(this.#subs); }
   _hasSubs() { return this.#liveCount > 0; }
   _version() { return this.#version; }
   _validate() { this.#validate(); }

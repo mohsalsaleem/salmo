@@ -11,7 +11,7 @@
 // Pure dev tooling — load only in dev environments. The panel renders
 // in shadow DOM so its styles are isolated from the host page.
 
-import { _getRegistry } from './lazy.js';
+import { _getRegistry, _onRegistryChange } from './lazy.js';
 import { VERSION } from './version.js';
 
 const STYLE = `
@@ -86,9 +86,11 @@ const HIGHLIGHT_ATTR = 'data-salmo-devtools-highlight';
 
 class FrameworkDevtools extends HTMLElement {
   /** @type {ShadowRoot} */ #root;
-  /** @type {number | null} */ #pollId = null;
   /** @type {string | null} */ #activeTag = null;
   #collapsed = false;
+  /** @type {(() => void) | null} */ #unsubRegistry = null;
+  /** @type {MutationObserver | null} */ #observer = null;
+  #renderScheduled = false;
 
   constructor() {
     super();
@@ -97,8 +99,13 @@ class FrameworkDevtools extends HTMLElement {
 
   connectedCallback() {
     this.#render();
-    // Re-render every 500ms to pick up new instances / registrations.
-    this.#pollId = /** @type {any} */ (setInterval(() => this.#render(), 500));
+    // Re-render the moment a new lazyComponent is registered.
+    this.#unsubRegistry = _onRegistryChange(() => this.#scheduleRender());
+    // Re-render when the document mutates so live counts stay fresh.
+    // Microtask-coalesced via #scheduleRender so a burst of mutations
+    // (e.g. a list re-render swapping 100 children) costs one render.
+    this.#observer = new MutationObserver(() => this.#scheduleRender());
+    this.#observer.observe(document.body, { childList: true, subtree: true });
     // Style block for highlight (injected once into the host document)
     if (!document.querySelector(`style[data-salmo-devtools]`)) {
       const s = document.createElement('style');
@@ -109,8 +116,20 @@ class FrameworkDevtools extends HTMLElement {
   }
 
   disconnectedCallback() {
-    if (this.#pollId != null) clearInterval(this.#pollId);
+    this.#unsubRegistry?.();
+    this.#unsubRegistry = null;
+    this.#observer?.disconnect();
+    this.#observer = null;
     this.#clearHighlight();
+  }
+
+  #scheduleRender() {
+    if (this.#renderScheduled) return;
+    this.#renderScheduled = true;
+    queueMicrotask(() => {
+      this.#renderScheduled = false;
+      if (this.isConnected) this.#render();
+    });
   }
 
   #render() {
