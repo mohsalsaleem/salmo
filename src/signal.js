@@ -30,6 +30,17 @@ const DIRTY = 2;
 /** @type {Subscriber | null} */
 let currentObserver = null;
 
+// Set to true while a Watcher's notify callback is on the stack.
+// The proposal prohibits signal reads and writes inside notify —
+// the user has to schedule a microtask if they want to act on the change.
+let inNotify = false;
+
+function assertNotInNotify(op) {
+  if (inNotify) {
+    throw new Error(`Cannot ${op} a signal inside a Watcher's notify callback`);
+  }
+}
+
 /**
  * @template T
  * @typedef {Object} EqualsOptions
@@ -59,6 +70,7 @@ class State {
 
   /** @returns {T} */
   get() {
+    assertNotInNotify('read');
     if (currentObserver) {
       this.#subs.add(currentObserver);
       currentObserver._trackDep?.(this, this.#version);
@@ -68,6 +80,7 @@ class State {
 
   /** @param {T} value */
   set(value) {
+    assertNotInNotify('write');
     if (this.#equals.call(this, this.#value, value)) return;
     this.#value = value;
     this.#version++;
@@ -114,6 +127,7 @@ class Computed {
 
   /** @returns {T} */
   get() {
+    assertNotInNotify('read');
     this.#validate();
     if (currentObserver) {
       this.#subs.add(currentObserver);
@@ -152,11 +166,19 @@ class Computed {
     currentObserver = this;
     /** @type {T} */
     let next;
-    try { next = this.#fn(); }
-    finally { currentObserver = prev; }
+    let changed;
+    try {
+      next = this.#fn();
+      // equals runs INSIDE the tracking context so anything it reads
+      // becomes a dep of this computed (not of whoever was on the
+      // stack before us — that would leak tracking info upward).
+      changed = !this.#everComputed
+        || !this.#equals.call(this, /** @type {T} */ (this.#value), next);
+    } finally {
+      currentObserver = prev;
+    }
 
-    // First compute always stores the value (no prior value to compare).
-    if (!this.#everComputed || !this.#equals.call(this, /** @type {T} */ (this.#value), next)) {
+    if (changed) {
       this.#value = next;
       this.#version++;
     }
@@ -234,10 +256,12 @@ class Watcher {
   _notify(_mark) {
     if (!this.#armed) return;
     this.#armed = false;
-    const prev = currentObserver;
+    const prevObs = currentObserver;
+    const prevNotify = inNotify;
     currentObserver = null;
+    inNotify = true;
     try { this.#notify.call(this); }
-    finally { currentObserver = prev; }
+    finally { inNotify = prevNotify; currentObserver = prevObs; }
   }
 
   // Watchers don't track deps — they only sit at the bottom.
@@ -295,9 +319,16 @@ function currentComputed() {
     : undefined;
 }
 
+/** @param {unknown} x */
+function isState(x) { return x instanceof State; }
+/** @param {unknown} x */
+function isComputed(x) { return x instanceof Computed; }
+
 export const Signal = {
   State,
   Computed,
+  isState,
+  isComputed,
   subtle: {
     Watcher,
     untrack,

@@ -67,23 +67,15 @@ describe('Signal.subtle.Watcher', () => {
     expect(w.getPending()).toEqual([]);
   });
 
-  it('notify fires in an untracked context', () => {
-    // If a Computed is created inside notify, it must not capture the
-    // outer Computed as a dep — notify always runs untracked.
+  it('prohibits signal reads and writes inside notify (spec-strict)', () => {
     const a = new Signal.State(0);
-    const outer = new Signal.Computed(() => a.get());
-    outer.get();
-
-    let leaked = false;
-    const inner = new Signal.Computed(() => a.get());
+    let err;
     const w = new Signal.subtle.Watcher(() => {
-      // Reading `inner` here should not subscribe `outer` to anything.
-      inner.get();
-      // Sanity: outer should already have a.get() as a dep, not anything new.
-      leaked = false;
+      try { a.get(); } catch (e) { err = e; }
     });
-    w.watch(outer);
+    w.watch(a);
     a.set(1);
-    expect(leaked).toBe(false);
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err)).toMatch(/Watcher/);
   });
 });
