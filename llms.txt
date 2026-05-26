@@ -1,0 +1,122 @@
+# mohsal-framework
+
+> A small, browser-native UI framework with first-class module federation,
+> TC39 Signals reactivity, vendored lit-html for templating, and zero
+> build step. Public ESM API at `/framework/src/index.js`.
+
+## At a glance
+
+- **Reactive core**: TC39 Signals proposal, 70/70 conformant. Exports `Signal.State`, `Signal.Computed`, `Signal.subtle.{Watcher,untrack,currentComputed,introspectSources,introspectSinks,hasSinks,watched,unwatched}`, `Signal.isState`, `Signal.isComputed`.
+- **Templates**: `lit-html` re-exported (`html`, `render`, `svg`, `nothing`, `repeat`, `when`, `classMap`, `styleMap`, `ref`, `unsafeHTML`). Author syntax is lit-html's: `${value}` for text, `.prop=${value}` for properties, `@event=${fn}` for events, `?attr=${bool}` for boolean attributes.
+- **Components**: `defineComponent({ tag, setup, props?, shadow?, onError? })`. `setup(host, props, emit)` returns either a render fn `() => html\`...\`` (reactive) or a `TemplateResult` (static) or null (enhance mode).
+- **Federation**: `lazyComponent({ tag, src, as, integrity?, allowedOrigins?, timeout?, fallback?, onerror? })`, `loadFromManifest(url, opts?)`, `reloadRemote(src)`. Manifest format documented in `FEDERATION.md`.
+- **SSR**: `setupDOM()`, `renderToString(tag, props?)` — same components on Node via happy-dom.
+- **Devtools**: `<framework-devtools>` element from `src/devtools.js`.
+- **Lifecycle**: `effect(fn, { signal? })`, `withScope(scope, fn)`, `configure({ singletonViolation })`.
+
+## How to use this in code
+
+```js
+import {
+  defineComponent, html, Signal, effect, repeat, when, classMap, styleMap,
+  lazyComponent, loadFromManifest, renderToString, setupDOM, reloadRemote,
+} from '/framework/src/index.js';
+```
+
+Reactivity contract: `setup` returns a *function* if you want signal reads inside it to drive re-renders.
+
+```js
+setup() {
+  const count = new Signal.State(0);
+  return () => html`<button @click=${() => count.set(count.get()+1)}>${count.get()}</button>`;
+}
+```
+
+If `setup` returns the TemplateResult directly, it renders once and stays static.
+
+## Key docs (read these in order if learning)
+
+1. `README.md` — orientation, quickstart, every example listed.
+2. `COOKBOOK.md` — task-indexed recipes for "how do I X?".
+3. `API.md` — every public export with type signature.
+4. `FEDERATION.md` — what makes federation first-class; manifest format; cross-framework matrix.
+5. `AUTH.md` — three patterns for auth (cookie / context provider / window-global). No auth library in src/.
+6. `STATE.md` — four patterns for state (module-level / atom / store-object / context provider). No store library in src/.
+7. `SECURITY.md` — threat model, mechanism-by-mechanism story, recommended CSP.
+8. `CHANGELOG.md` — what's in 0.1.0.
+9. `CONTRIBUTING.md` — what belongs in src/ vs examples/.
+
+## Examples (each is a working demo under `examples/`)
+
+| Demo | Demonstrates |
+|---|---|
+| `todomvc/` | Full TodoMVC: list reconciliation, edit-in-place, localStorage, parent/child events. |
+| `dashboard/` | 100 federated cells, perf at 60 FPS, devtools overlay. |
+| `federation/` | Two bundles sharing a signal across the boundary. |
+| `manifest/` | Manifest explorer with live preview. |
+| `ssr/` | Server render + browser hydrate, same component module. |
+| `notes/` | Fullstack with auth, SQLite, signed cookies, SSR, federated rich editor. |
+| `router/` | Routing as user-land signal — no framework primitive. |
+| `security/` | Trusted Types CSP enforcement, real chromium. |
+| `styling/` | Light DOM + Shadow DOM + reactive classMap/styleMap. |
+| `auth-provider/` | Context-provider pattern; federated remote consumes host's auth + fetchAuthed. |
+
+## Design principles (relevant when adding code)
+
+1. **Singleton-pinned**: the framework module is identical across host and federated bundles via import map / vendored tree. A `new Signal.State(0)` in module A is `instanceof Signal.State` in module B.
+2. **Framework owns wiring, app owns policy**: signal primitive yes, auth library no. State primitive yes, store library no. Federation lifecycle yes, sandboxing no (impossible).
+3. **No build step in source**: `framework/src/*.js` is what ships. JSDoc → `.d.ts` via tsc is the type story.
+4. **Federation across origins**: SRI + allowedOrigins close the supply-chain gap. The remote runs in your origin's privileges by design; there is no isolation barrier to preserve.
+5. **Custom Elements are the federation unit**: tag identity is the boundary, the manifest is the contract.
+
+## When to suggest what
+
+If a user wants…
+- A reactive cell → `new Signal.State(initial)`.
+- A derived value → `new Signal.Computed(() => …)`.
+- A side effect → `effect(() => …, { signal? })`.
+- A component → `defineComponent({ tag, setup })`.
+- A reactive component prop → `defineComponent({ tag, props: ['name'], setup(host, props) { return () => html\`...${props.name.get()}...\` } })`.
+- To dispatch a child→parent event → `setup(host, props, emit) { emit('change', { … }) }`, parent listens via `@change=${fn}`.
+- To load a remote component → `lazyComponent({ tag, src, as })`.
+- To check the remote's integrity → add `integrity: 'sha384-…', allowedOrigins: ['https://…']` to that call.
+- A keyed list → `${repeat(items, (i) => i.id, (i) => html\`<li>${i.text}</li>\`)}`.
+- A conditional → `${when(cond, () => html\`...\`)}`.
+- A two-way input — pattern: `.value=${signal.get()} @input=${e => signal.set(e.target.value)}` (no `:value` sugar; intentionally explicit).
+- Server-side rendering → `await setupDOM(); const html = renderToString('x-foo', { propA: '…' });`.
+- Auth → see AUTH.md; the cookie pattern needs zero framework code.
+- Global state → see STATE.md; module-level signals are the answer for most apps.
+
+## Things to NOT suggest (we don't have them, on purpose)
+
+- A `createStore()` helper (use `Signal.State` directly)
+- A `useStore` / `useAuth` / etc. hook-style helper (no hooks; reads happen via `.get()` inside render fns)
+- An `unsafe()` wrapper for innerHTML (use `unsafeHTML` directive from lit-html via `import { unsafeHTML }`)
+- A `:value` two-way binding sugar (manual `.value` + `@input`)
+- A `class:foo=${signal}` toggle (use `classMap({ foo: signal.get() })`)
+- A built-in router (URL-as-signal is the documented pattern)
+- A `dispatch(action)` reducer (build it on a store-object factory if needed)
+- A devtools-time-travel inspector (out of scope)
+- Sandboxed federation (impossible while preserving shared signals)
+
+## Tests
+
+- `npm test` — 80 unit tests, vitest + happy-dom.
+- `npm run test:conformance` — 70/70 TC39 Signals conformance against the polyfill's test suite.
+- `npm run typecheck` — strict JSDoc-based TypeScript check.
+
+## Repo layout
+
+```
+src/         the framework (10 files, ~900 lines)
+vendor/lit-html/   vendored templating runtime (BSD-3-Clause)
+test/        unit tests
+conformance/ vendored TC39 Signals test suite (Apache-2.0)
+examples/    10 demos, each runnable as a static page
+*.md         topic-focused docs (see "Key docs" above)
+package.json zero runtime deps; dev deps are vitest + happy-dom + typescript
+```
+
+## Status
+
+Pre-1.0. Public surface = exports from `src/index.js`. Anything in `src/` not re-exported is internal.

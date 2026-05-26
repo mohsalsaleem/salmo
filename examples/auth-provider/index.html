@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Auth provider · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 820px; margin: 0 auto; color: #222; }
+		h1 { margin: 0 0 0.75rem; }
+		section { background: white; border: 1px solid #ddd; border-radius: 8px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
+		h2 { margin-top: 0; font-size: 1.05rem; }
+		button { font: inherit; padding: 0.35rem 0.85rem; border-radius: 4px; border: 1px solid #ccc; background: white; cursor: pointer; }
+		button.primary { background: #06f; color: white; border-color: #06f; }
+		button:hover { background: #f4f4f4; } button.primary:hover { background: #05c; }
+		input { font: inherit; padding: 0.4rem 0.6rem; border: 1px solid #ccc; border-radius: 4px; }
+		code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.9em; }
+		.muted { color: #888; font-size: 0.9rem; }
+		x-auth-provider, x-login-panel, x-private-info-lazy { display: block; }
+	</style>
+</head>
+<body>
+	<h1>Context provider for auth</h1>
+	<p>
+		The host wraps content in a tiny <code>&lt;x-auth-provider&gt;</code>
+		element. Children (including federated remotes) find it with
+		<code>this.closest('x-auth-provider')</code> and read the session
+		signal + an authed-fetch helper. This is just the platform's
+		"ancestor lookup" — no framework primitive needed beyond signals.
+	</p>
+
+	<x-auth-provider>
+		<section>
+			<h2>Login</h2>
+			<x-login-panel></x-login-panel>
+		</section>
+
+		<section>
+			<h2>Federated widget that reads the session</h2>
+			<p class="muted">
+				Loaded from <code>widgets/private-info.js</code> — a separate
+				bundle. It walks up to the provider, subscribes to the session
+				signal, and uses the provider's <code>fetchAuthed</code> to
+				make authenticated requests.
+			</p>
+			<x-private-info-lazy></x-private-info-lazy>
+		</section>
+	</x-auth-provider>
+
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

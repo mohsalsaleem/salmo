@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Trusted Types demo · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- The CSP that puts the page into Trusted Types enforcement mode.
+	     `require-trusted-types-for 'script'` blocks string assignment at
+	     dangerous DOM sinks; only TrustedHTML / TrustedScript / TrustedScriptURL
+	     produced by a registered policy is accepted. `trusted-types` declares
+	     which policy names are allowed — we register "mohsal-framework". -->
+	<meta http-equiv="Content-Security-Policy"
+	      content="require-trusted-types-for 'script'; trusted-types lit-html">
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }
+		section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+		section.bad { border-color: #c00; background: #fff5f5; }
+		section.good { border-color: #080; background: #f5fff5; }
+		button { font: inherit; padding: 0.4rem 0.8rem; margin-right: 0.5rem; }
+		pre { background: #f5f5f5; padding: 0.5rem; border-radius: 4px; font-size: 0.85rem; overflow-x: auto; }
+		.log { font-family: monospace; font-size: 0.9rem; }
+	</style>
+</head>
+<body>
+	<h1>Trusted Types demo</h1>
+	<p>
+		This page is loaded with <code>require-trusted-types-for 'script'</code>
+		in its CSP. The browser refuses any string written to
+		<code>innerHTML</code> et al. unless it came from a registered
+		Trusted Types policy.
+	</p>
+
+	<x-tt-demo></x-tt-demo>
+
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

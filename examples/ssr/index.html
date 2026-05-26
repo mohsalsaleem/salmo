@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>SSR demo · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }
+		fieldset { margin-bottom: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+		.counter { display: inline-flex; align-items: center; gap: 0.75rem; font-size: 1.25rem; }
+		.counter button { width: 2rem; height: 2rem; font: inherit; cursor: pointer; }
+		x-counter { display: inline-block; }
+	</style>
+</head>
+<body>
+<x-page><!---->
+    <h1>SSR + hydration demo</h1>
+    <p>
+      This whole page was rendered to HTML on Node (via
+      <code>renderToString</code> + happy-dom), then shipped to the
+      browser. When the JS loads, the browser parses the HTML,
+      upgrades each <code>&lt;x-counter&gt;</code>, and the buttons
+      become interactive.
+    </p>
+
+    <fieldset>
+      <legend>Counter A (initial 0)</legend>
+      <x-counter initial="0"><!---->
+      <div class="counter">
+        <button aria-label="decrement">−</button>
+        <strong><!--?lit$903050644$-->0</strong>
+        <button aria-label="increment">+</button>
+      </div>
+    </x-counter>
+    </fieldset>
+
+    <fieldset>
+      <legend>Counter B (initial 42)</legend>
+      <x-counter initial="42"><!---->
+      <div class="counter">
+        <button aria-label="decrement">−</button>
+        <strong><!--?lit$903050644$-->42</strong>
+        <button aria-label="increment">+</button>
+      </div>
+    </x-counter>
+    </fieldset>
+
+    <p style="color:#888;font-size:0.9rem;">
+      Open view-source: each counter's number appears in the HTML
+      the server produced. After hydration the counts are interactive.
+    </p>
+  </x-page>
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

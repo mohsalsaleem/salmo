@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Router demo · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }
+		nav { display: flex; gap: 0.75rem; border-bottom: 1px solid #ddd; padding-bottom: 0.75rem; margin-bottom: 1rem; }
+		nav a { color: #06f; text-decoration: none; padding: 0.25rem 0.5rem; border-radius: 4px; }
+		nav a.active { background: #06f; color: white; }
+		nav a:hover { background: #f0f5ff; }
+		nav a.active:hover { background: #06f; color: white; }
+		x-router-demo { display: block; }
+	</style>
+</head>
+<body>
+	<x-router-demo></x-router-demo>
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

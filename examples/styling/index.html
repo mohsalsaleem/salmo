@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Styling · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 820px; margin: 0 auto; }
+		h1 { margin-top: 0; }
+		section { border: 1px solid #ddd; border-radius: 6px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+		h2 { margin-top: 0; font-size: 1.1rem; }
+		p { font-size: 0.95rem; }
+		code { background: #f4f4f4; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+
+		/* Page CSS used by <x-light-demo>. */
+		x-light-demo .pill {
+			display: inline-block;
+			padding: 0.35rem 0.9rem;
+			border-radius: 999px;
+			background: #06f; color: white;
+			font-size: 0.9rem;
+			margin-right: 0.4rem;
+		}
+		x-light-demo .pill.muted { background: #ddd; color: #555; }
+
+		x-light-demo, x-shadow-demo, x-reactive-demo { display: block; margin-top: 0.5rem; }
+	</style>
+</head>
+<body>
+	<h1>Styling</h1>
+	<p>
+		Three patterns: page CSS (light DOM), a scoped <code>&lt;style&gt;</code>
+		block (shadow DOM), and reactive styles via <code>classMap</code> +
+		<code>styleMap</code>. Everything lit-html does for styling works
+		here unchanged — we just re-export the directives.
+	</p>
+
+	<section>
+		<h2>1. Light DOM + page CSS</h2>
+		<p>
+			Default rendering goes into the host's light DOM. Page CSS targets
+			it normally (<code>x-light-demo .pill</code>, etc).
+		</p>
+		<x-light-demo></x-light-demo>
+	</section>
+
+	<section>
+		<h2>2. Shadow DOM with a scoped <code>&lt;style&gt;</code></h2>
+		<p>
+			<code>shadow: true</code> opts into Shadow DOM. A <code>&lt;style&gt;</code>
+			block in the template only applies inside the component — try opening
+			DevTools and inspecting; the rule below doesn't leak to the page.
+		</p>
+		<x-shadow-demo></x-shadow-demo>
+	</section>
+
+	<section>
+		<h2>3. Reactive: <code>classMap</code> + <code>styleMap</code></h2>
+		<p>
+			Toggle classes and inline styles from signals. Click the buttons.
+		</p>
+		<x-reactive-demo></x-reactive-demo>
+	</section>
+
+	<script type="module" src="./app.js"></script>
+</body>
+</html>

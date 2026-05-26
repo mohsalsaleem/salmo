@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Federation demo · mohsal-framework</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<!-- The import map is what makes federation work: every bundle that
+	     imports the bare specifier "mohsal-framework" resolves to the
+	     SAME URL, so the reactive core is a singleton across host and
+	     remote. Without this, signals across the two bundles wouldn't
+	     track each other. -->
+	<script type="importmap">
+	{
+		"imports": {
+			"mohsal-framework": "../../src/index.js"
+		}
+	}
+	</script>
+	<style>
+		body { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }
+		fieldset { margin-bottom: 1rem; padding: 1rem; border: 1px solid #ddd; border-radius: 6px; }
+		legend { font-weight: bold; }
+		.placeholder { color: #888; font-style: italic; }
+		x-remote-clock-lazy { display: block; margin-top: 0.5rem; }
+		button { font: inherit; padding: 0.3rem 0.7rem; }
+	</style>
+</head>
+<body>
+	<h1>Federation demo</h1>
+	<p>
+		This page is the <strong>host</strong>. It loads a <strong>remote</strong>
+		component from <code>/examples/federation/remote/clock.js</code> — a
+		different bundle, served from a different path. They share one
+		<code>Signal.State</code> across the bundle boundary.
+	</p>
+
+	<x-host-app></x-host-app>
+
+	<script type="module" src="./host/app.js"></script>
+</body>
+</html>

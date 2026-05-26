@@ -1,9 +1,14 @@
 {
   "name": "mohsal-framework",
-  "version": "0.0.1",
-  "description": "A tiny signals-based frontend framework",
+  "version": "0.1.0",
+  "description": "A small, browser-native UI framework with first-class module federation, TC39 Signals reactivity, and vendored lit-html templating. Zero build step.",
   "type": "module",
   "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mohsalsaleem/mohsal-framework.git"
+  },
   "main": "src/index.js",
   "types": "types/index.d.ts",
   "exports": {

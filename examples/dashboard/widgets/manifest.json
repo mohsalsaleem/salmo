@@ -1,0 +1,13 @@
+{
+  "name": "dashboard-widgets",
+  "version": "1.0.0",
+  "framework": { "name": "mohsal-framework", "minVersion": "0.0.1" },
+  "components": [
+    {
+      "tag": "x-metric",
+      "src": "./metric.js",
+      "props": [],
+      "events": []
+    }
+  ]
+}
