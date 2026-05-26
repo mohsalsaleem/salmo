@@ -1,15 +1,45 @@
 // Singleton enforcement — see signal.js comment.
+//
+// Default is `warn` because the most common cause of a second load is
+// HMR / dev-server tooling, and we don't want that to throw. In
+// production, opt into `throw` so misconfigured federation fails loudly
+// at boot rather than silently producing dead reactivity later:
+//
+//   import { configure } from 'mohsal-framework';
+//   configure({ singletonViolation: 'throw' });
+
 const MARKER = '__mohsal_framework_loaded__';
+const BEHAVIOR_KEY = '__mohsal_framework_singleton_behavior__';
 /** @type {any} */
 const g = globalThis;
+
+/** @type {'warn' | 'throw' | 'silent'} */
+let singletonBehavior = g[BEHAVIOR_KEY] ?? 'warn';
+
 if (g[MARKER]) {
-  // eslint-disable-next-line no-console
-  console.warn(
+  const msg =
     'mohsal-framework: a second copy of the core module is being loaded.\n' +
-    'Pin to a single URL via an import map.'
-  );
+    'Signals created under one copy will NOT track signals or computeds\n' +
+    'tracked under the other. Pin the framework to a single URL via an\n' +
+    'import map.';
+  if (singletonBehavior === 'throw') throw new Error(msg);
+  if (singletonBehavior === 'warn') console.warn(msg);
 } else {
   g[MARKER] = true;
+}
+
+/**
+ * Tune framework-level behaviour. Currently exposes singleton-violation
+ * policy: 'warn' (default), 'throw' (recommended for production), or
+ * 'silent' (only useful in test environments).
+ *
+ * @param {{ singletonViolation?: 'warn' | 'throw' | 'silent' }} options
+ */
+export function configure({ singletonViolation } = {}) {
+  if (singletonViolation) {
+    singletonBehavior = singletonViolation;
+    g[BEHAVIOR_KEY] = singletonViolation;
+  }
 }
 
 // === From lit-html (vendored under framework/vendor/lit-html/). ===

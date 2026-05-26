@@ -26,13 +26,19 @@ import { withScope } from './scope.js';
  * @property {(host: HTMLElement, props: Record<string, InstanceType<typeof Signal.State<unknown>>>, emit: (type: string, detail?: unknown) => void) => (() => TemplateResult) | TemplateResult | null | undefined} setup
  * @property {boolean} [shadow]
  * @property {readonly string[]} [props]
+ * @property {(err: Error, host: HTMLElement) => TemplateResult | Node | null} [onError]
+ *   Error boundary. If setup() throws, or the render function throws
+ *   on any (re)render, the framework calls onError(err, host) and
+ *   renders its result in place. Without onError, errors are logged
+ *   to the console and re-thrown — the same behaviour you'd get
+ *   without a boundary, but contained to the component.
  */
 
 /**
  * @param {ComponentSpec} spec
  * @returns {CustomElementConstructor}
  */
-export function defineComponent({ tag, setup, shadow = false, props = [] }) {
+export function defineComponent({ tag, setup, shadow = false, props = [], onError }) {
   /** @type {WeakMap<HTMLElement, Record<string, InstanceType<typeof Signal.State<unknown>>>>} */
   const propBags = new WeakMap();
 
@@ -59,6 +65,31 @@ export function defineComponent({ tag, setup, shadow = false, props = [] }) {
       propBags.get(this)?.[name]?.set(value);
     }
 
+    /** @param {Error} err */
+    #renderError(err) {
+      // eslint-disable-next-line no-console
+      console.error(`[${tag}] error in setup/render:`, err);
+      if (!onError) {
+        // No boundary: re-throw so the failure isn't silent. lit-html
+        // hasn't necessarily committed; clear the root to avoid showing
+        // half-rendered content alongside the console error.
+        if (this.#root) {
+          while (this.#root.firstChild) this.#root.removeChild(this.#root.firstChild);
+        }
+        throw err;
+      }
+      const result = onError(err, this);
+      if (result == null) return;
+      if (this.#root) {
+        if (typeof (/** @type {any} */ (result).nodeType) === 'number') {
+          while (this.#root.firstChild) this.#root.removeChild(this.#root.firstChild);
+          this.#root.appendChild(/** @type {Node} */ (result));
+        } else {
+          render(/** @type {TemplateResult} */ (result), this.#root);
+        }
+      }
+    }
+
     connectedCallback() {
       this.#controller = new AbortController();
       this.#root = shadow ? this.attachShadow({ mode: 'open' }) : this;
@@ -69,30 +100,40 @@ export function defineComponent({ tag, setup, shadow = false, props = [] }) {
       };
 
       withScope({ signal: this.#controller.signal }, () => {
-        const view = setup(
-          this,
-          /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */ (propBags.get(this) ?? {}),
-          emit,
-        );
+        /** @type {(() => TemplateResult) | TemplateResult | null | undefined} */
+        let view;
+        try {
+          view = setup(
+            this,
+            /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */ (propBags.get(this) ?? {}),
+            emit,
+          );
+        } catch (err) {
+          this.#renderError(err instanceof Error ? err : new Error(String(err)));
+          return;
+        }
 
-        // setup() ran BEFORE this clear so it can read fallback children
-        // (the no-JS hydration pattern). Once we know setup returned a
-        // view, we own the DOM and replace any pre-existing fallback.
         if (view != null) {
           while (root.firstChild) root.removeChild(root.firstChild);
         }
 
         if (typeof view === 'function') {
-          // Reactive path: each signal read inside the render fn becomes
-          // a dep of this effect; on signal change, we ask lit-html to
-          // re-render, and its template diff updates only what changed.
+          const renderFn = /** @type {() => TemplateResult} */ (view);
           effect(() => {
-            render(/** @type {() => TemplateResult} */ (view)(), root);
+            try {
+              render(renderFn(), root);
+            } catch (err) {
+              this.#renderError(err instanceof Error ? err : new Error(String(err)));
+            }
           });
           this.#owned = true;
         } else if (view != null) {
-          render(/** @type {TemplateResult} */ (view), root);
-          this.#owned = true;
+          try {
+            render(/** @type {TemplateResult} */ (view), root);
+            this.#owned = true;
+          } catch (err) {
+            this.#renderError(err instanceof Error ? err : new Error(String(err)));
+          }
         }
       });
     }

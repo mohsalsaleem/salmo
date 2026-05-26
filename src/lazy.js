@@ -1,56 +1,103 @@
-// lazyComponent({ tag, src, as, fallback, integrity, allowedOrigins })
-// — federation's loading primitive.
-//
-// Defines a Custom Element under `tag` that, on first connect,
-// dynamically import()s `src` and then mounts the *real* component
-// (registered by the remote module under `as`) inside itself,
-// forwarding the placeholder's attributes. Loading is a first-class
-// state, not a try/catch around `await import()`.
+// lazyComponent — federation's loading primitive.
 //
 //   lazyComponent({
 //     tag: 'acme-calendar-lazy',
 //     src: 'https://acme.example.com/calendar.js',
 //     as: 'acme-calendar',
-//     integrity: 'sha384-...',                       // Phase 3
-//     allowedOrigins: ['https://acme.example.com'],  // Phase 3
+//     timeout: 30_000,                              // ms; 0 disables
 //     fallback: () => html`<p>Loading…</p>`,
+//     onerror: ({ src, error, retry }) => html`...`,
+//     integrity: 'sha384-...',
+//     allowedOrigins: ['https://acme.example.com'],
 //   });
 //
 // Trust model: loading a remote .js runs that code with your origin's
-// privileges. There is no sandboxing path that preserves shared signals
-// — iframes lose the bridge, Realms isn't here. The SRI + origin
-// allowlist below close the *supply-chain* hole (the URL serving you
-// something different than you expected); they do NOT sandbox the
-// remote once it has loaded. See SECURITY.md.
+// privileges. No sandboxing path preserves shared signals — iframes
+// lose the bridge, Realms isn't here. The SRI + origin allowlist below
+// close the *supply-chain* hole only.  See SECURITY.md.
 
-import { render as litRender } from '../vendor/lit-html/lit-html.js';
+import { html, render as litRender } from '../vendor/lit-html/lit-html.js';
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** @typedef {Object} LazyErrorDetail
+ *  @property {string} src
+ *  @property {Error} error
+ *  @property {() => void} retry
+ */
 
 /** @typedef {Object} LazySpec
- *  @property {string} tag              Tag the placeholder registers under.
- *  @property {string} src              Module URL to import().
- *  @property {string} [as]             Real tag the remote registers.
- *  @property {() => Node | DocumentFragment} [fallback] Placeholder while loading / on error.
- *  @property {string} [integrity]      Subresource Integrity, e.g. "sha384-abc...".
- *  @property {string[]} [allowedOrigins] Refuse to load from any other origin.
+ *  @property {string} tag
+ *  @property {string} src
+ *  @property {string} [as]
+ *  @property {() => unknown} [fallback]   DOM Node or lit-html TemplateResult.
+ *  @property {(d: LazyErrorDetail) => unknown} [onerror]
+ *  @property {number} [timeout]           ms; default 30s, 0 = disabled
+ *  @property {string} [integrity]
+ *  @property {string[]} [allowedOrigins]
  */
 
 /** Shared promises so concurrent lazy elements pointing at the same src
  *  do not trigger N parallel imports. @type {Map<string, Promise<unknown>>} */
 const inFlight = new Map();
 
+/** @param {LazyErrorDetail} d */
+const defaultOnError = (d) => html`
+  <div role="alert" style="
+    padding: 0.75rem 1rem;
+    border: 1px solid #c00;
+    background: #fff5f5;
+    color: #800;
+    border-radius: 4px;
+    font-family: system-ui, sans-serif;
+    font-size: 0.9rem;
+  ">
+    <strong>Couldn't load remote component</strong><br>
+    <small style="opacity:0.7">${d.src}</small><br>
+    <code>${d.error?.message ?? String(d.error)}</code>
+    <button @click=${d.retry} style="
+      margin-top: 0.5rem;
+      font: inherit;
+      padding: 0.2rem 0.6rem;
+      background: #c00; color: white; border: none; border-radius: 3px;
+      cursor: pointer;
+    ">Retry</button>
+  </div>
+`;
+
 /**
  * @param {LazySpec} spec
+ * @returns {CustomElementConstructor}
  */
-export function lazyComponent({ tag, src, as, fallback, integrity, allowedOrigins }) {
+export function lazyComponent({
+  tag, src, as, fallback,
+  onerror = defaultOnError,
+  timeout = DEFAULT_TIMEOUT_MS,
+  integrity, allowedOrigins,
+}) {
   if (!as) throw new Error('lazyComponent: `as` (the real tag the remote registers) is required');
   if (as === tag) throw new Error('lazyComponent: `as` must differ from `tag` (the placeholder cannot reuse the real tag)');
   const realTag = /** @type {string} */ (as);
 
   class LazyElement extends HTMLElement {
     connectedCallback() {
+      this.#mount();
+    }
+
+    /**
+     * Retry the import. Clears the shared in-flight cache so a new
+     * import is kicked off rather than reusing the previous failure.
+     */
+    retry() {
+      inFlight.delete(src);
+      this.#mount();
+    }
+
+    #mount() {
+      // Render the (possibly user-provided) fallback.
+      this.replaceChildren();
       if (fallback) {
         const out = fallback();
-        // Accept either a DOM node or a lit-html TemplateResult.
         if (out && typeof (/** @type {any} */ (out).nodeType) === 'number') {
           this.append(/** @type {Node} */ (out));
         } else if (out) {
@@ -58,20 +105,32 @@ export function lazyComponent({ tag, src, as, fallback, integrity, allowedOrigin
         }
       }
 
-      let p = inFlight.get(src);
-      if (!p) {
-        p = verifiedImport(src, { integrity, allowedOrigins });
-        inFlight.set(src, p);
+      let importP = inFlight.get(src);
+      if (!importP) {
+        importP = verifiedImport(src, { integrity, allowedOrigins });
+        inFlight.set(src, importP);
       }
 
-      p.then(
+      // Race the import against a configurable timeout. A hung CDN
+      // would otherwise leave the placeholder visible forever.
+      const racers = [importP];
+      /** @type {ReturnType<typeof setTimeout> | null} */
+      let timer = null;
+      if (timeout > 0) {
+        racers.push(new Promise((_, rej) => {
+          timer = setTimeout(
+            () => rej(new Error(`mohsal-framework: load timed out after ${timeout}ms`)),
+            timeout,
+          );
+        }));
+      }
+
+      Promise.race(racers).then(
         () => {
+          if (timer) clearTimeout(timer);
           if (!this.isConnected) return;
           if (!customElements.get(realTag)) {
-            this.dispatchEvent(new CustomEvent('lazy-error', {
-              detail: { src, error: new Error(`module loaded but no element registered as <${realTag}>`) },
-              bubbles: true,
-            }));
+            this.#onError(new Error(`module loaded but no element registered as <${realTag}>`));
             return;
           }
           this.replaceChildren();
@@ -82,12 +141,26 @@ export function lazyComponent({ tag, src, as, fallback, integrity, allowedOrigin
           this.append(real);
         },
         (err) => {
-          if (!this.isConnected) return;
-          this.dispatchEvent(new CustomEvent('lazy-error', {
-            detail: { src, error: err }, bubbles: true,
-          }));
+          if (timer) clearTimeout(timer);
+          this.#onError(err instanceof Error ? err : new Error(String(err)));
         },
       );
+    }
+
+    /** @param {Error} error */
+    #onError(error) {
+      if (!this.isConnected) return;
+      this.dispatchEvent(new CustomEvent('lazy-error', {
+        detail: { src, error }, bubbles: true,
+      }));
+      // litRender owns the host's children once we hand it the
+      // template — passing the SAME host repeatedly with different
+      // templates is the supported pattern. Don't manually clear
+      // first; that would discard lit-html's part tree set up for
+      // the fallback render and re-hydrate from scratch (works for
+      // the first call, but the second call leaks state).
+      const detail = { src, error, retry: () => this.retry() };
+      litRender(/** @type {any} */ (onerror(detail)), this);
     }
 
     disconnectedCallback() {
@@ -98,22 +171,7 @@ export function lazyComponent({ tag, src, as, fallback, integrity, allowedOrigin
   return LazyElement;
 }
 
-/**
- * Import a module URL with optional origin allowlisting and SRI hash
- * verification. With neither, this is a plain `import()`. With either,
- * we fetch the bytes ourselves, check them, and only then hand them to
- * the module loader as a blob URL — so a hijacked CDN can't ship you
- * code that imports normally.
- *
- * Limitation: blob-URL modules can't resolve relative imports (`./foo`)
- * inside the remote because the blob URL has no meaningful base. Bare
- * specifiers (resolved via the page's import map) work fine. For
- * SRI-verified remotes, ship single-file bundles.
- *
- * @param {string} src
- * @param {{ integrity?: string; allowedOrigins?: string[] }} opts
- * @returns {Promise<unknown>}
- */
+/** @param {string} src @param {{ integrity?: string; allowedOrigins?: string[] }} [opts] */
 async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
   if (allowedOrigins && allowedOrigins.length > 0) {
     const url = new URL(src, /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/');
@@ -127,9 +185,7 @@ async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
   if (!integrity) return import(src);
 
   const m = /^(sha256|sha384|sha512)-(.+)$/.exec(integrity.trim());
-  if (!m) {
-    throw new Error(`mohsal-framework: unsupported integrity format: ${integrity}`);
-  }
+  if (!m) throw new Error(`mohsal-framework: unsupported integrity format: ${integrity}`);
   const algoName = /** @type {'SHA-256'|'SHA-384'|'SHA-512'} */ (
     { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' }[m[1]]
   );
@@ -153,8 +209,6 @@ async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
   try {
     return await import(/* @vite-ignore */ blobUrl);
   } finally {
-    // Defer revoke so the module's own dynamic imports (if any) can
-    // still resolve against the blob URL during the same task.
     setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
   }
 }

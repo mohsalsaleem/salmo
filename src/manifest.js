@@ -7,37 +7,30 @@
 //   {
 //     "name": "acme-widgets",
 //     "version": "1.0.0",
-//     "framework": {
-//       "name": "mohsal-framework",
-//       "minVersion": "0.0.1"
-//     },
+//     "framework": { "name": "mohsal-framework", "minVersion": "0.0.1" },
 //     "components": [
 //       {
 //         "tag": "acme-calendar",
 //         "src": "./calendar.js",
+//         "integrity": "sha384-...",          // optional
 //         "props": [{ "name": "date",  "type": "string" }],
 //         "events": [{ "name": "select", "detail": { "iso": "string" } }]
 //       }
 //     ]
 //   }
 //
-// `src` is resolved relative to the manifest URL. `lazyComponent` is
-// registered per component with a deterministic placeholder tag
-// (`${tag}-lazy`) so usage in templates is:
-//
-//   <acme-calendar-lazy></acme-calendar-lazy>
-//
-// The integrity + allowedOrigins options passed to `loadFromManifest`
-// are forwarded to every lazyComponent — keeping the supply-chain
-// guarantees regardless of how many components the manifest lists.
+// `src` is resolved relative to the manifest URL. Each component is
+// registered as `${tag}-lazy`. Per-component failures (an unsupported
+// integrity format, a missing `tag`, etc.) are reported in the
+// returned `results` array — they do not take the whole manifest down.
 
 import { lazyComponent } from './lazy.js';
 
 /**
  * @typedef {Object} ManifestComponent
  * @property {string} tag
- * @property {string} src           Relative or absolute URL of the module.
- * @property {string} [integrity]   Optional SRI hash for this component's module.
+ * @property {string} src
+ * @property {string} [integrity]
  * @property {Array<{ name: string, type?: string }>} [props]
  * @property {Array<{ name: string, detail?: any }>} [events]
  */
@@ -51,22 +44,32 @@ import { lazyComponent } from './lazy.js';
  */
 
 /**
- * @typedef {Object} LoadOptions
- * @property {string[]} [allowedOrigins]
- *   Forwarded to every lazyComponent call.  Refuses to load any
- *   component whose `src` resolves outside this list.
- * @property {(spec: ManifestComponent, host: Manifest) => boolean} [accept]
- *   Optional gate — return false to skip a component (e.g. version
- *   incompatibility, missing feature, opt-out).
+ * @typedef {Object} LoadResultEntry
+ * @property {string} tag
+ * @property {'registered' | 'skipped' | 'error'} status
+ * @property {string} [reason]   For `skipped` (why) or `error` (message).
  */
 
 /**
- * Fetch a federation manifest and register every component as a
- * lazyComponent. Returns the parsed manifest so callers can inspect it.
- *
+ * @typedef {Object} LoadResult
+ * @property {Manifest} manifest
+ * @property {LoadResultEntry[]} results
+ */
+
+/**
+ * @typedef {Object} LoadOptions
+ * @property {string[]} [allowedOrigins]
+ *   Forwarded to every lazyComponent call.
+ * @property {(spec: ManifestComponent, host: Manifest) => boolean} [accept]
+ *   Return false to skip a component (e.g. version checks, opt-outs).
+ * @property {number} [timeout]
+ *   Forwarded to every lazyComponent call.
+ */
+
+/**
  * @param {string} manifestUrl
  * @param {LoadOptions} [options]
- * @returns {Promise<Manifest>}
+ * @returns {Promise<LoadResult>}
  */
 export async function loadFromManifest(manifestUrl, options = {}) {
   const res = await fetch(manifestUrl);
@@ -79,18 +82,33 @@ export async function loadFromManifest(manifestUrl, options = {}) {
 
   const base = new URL(manifestUrl, /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/');
 
+  /** @type {LoadResultEntry[]} */
+  const results = [];
   for (const c of manifest.components) {
-    if (options.accept && !options.accept(c, manifest)) continue;
-    const src = new URL(c.src, base).href;
-    lazyComponent({
-      tag: `${c.tag}-lazy`,
-      src,
-      as: c.tag,
-      integrity: c.integrity,
-      allowedOrigins: options.allowedOrigins,
-    });
+    try {
+      if (options.accept && !options.accept(c, manifest)) {
+        results.push({ tag: c.tag, status: 'skipped', reason: 'rejected by accept()' });
+        continue;
+      }
+      const src = new URL(c.src, base).href;
+      lazyComponent({
+        tag: `${c.tag}-lazy`,
+        src,
+        as: c.tag,
+        integrity: c.integrity,
+        allowedOrigins: options.allowedOrigins,
+        timeout: options.timeout,
+      });
+      results.push({ tag: c.tag, status: 'registered' });
+    } catch (err) {
+      results.push({
+        tag: c.tag,
+        status: 'error',
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
-  return manifest;
+  return { manifest, results };
 }
 
 /**
