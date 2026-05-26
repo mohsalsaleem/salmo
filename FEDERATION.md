@@ -77,6 +77,18 @@ The proposal we already pass 70/70 of is the same one Lit, Solid, Preact, and Vu
 
 We're betting on the platform. The framework's value migrates from "owns the reactive core" to "knows how to federate things that use the core."
 
+## Sharing state with remotes
+
+A federated remote runs **inside the host's page realm** — `import(src)` brings its bytes into your origin. There's no iframe, no `postMessage` round-trip, no separate JS context. That fact decides everything about state sharing:
+
+1. **Browser-provided state** (cookies, `localStorage`, `sessionStorage`, the URL) — already shared. The browser doesn't know which `fetch` came from the host code vs the remote; both get the cookies.
+2. **App state in signals** — share via one of three patterns:
+   - **Prop binding** — `<acme-foo-lazy .session=${signal.get()}>`. Most explicit. Verbose if many components need it.
+   - **Context provider** — `<x-auth-provider>` (or `x-theme-provider`, `x-locale-provider`, …) wraps the tree; consumers find it via `host.closest('x-auth-provider')` and read instance state directly. The platform's ancestor-lookup is the whole mechanism — no framework primitive needed beyond signals. See `examples/auth-provider/` for a worked example, `AUTH.md` for the long-form pattern.
+   - **Module-level signal** — a singleton exported from a module both bundles import. Works because the framework is pinned to one URL via the vendor tree, so identity holds. Use for app-wide invariants (current locale, the global router) where one provider doesn't make sense.
+
+The principle: the framework provides the reactive primitive (`Signal.State`), the loading lifecycle (`lazyComponent`), and the security boundary (SRI + origin). How state crosses the boundary is the app's choice — and the choice is the same one any non-federated app makes for sharing state between sibling components.
+
 ## Trust model (summary; see SECURITY.md for full)
 
 Federation gives the remote your origin's privileges. We close the **supply-chain** gap (SRI + origin allowlist) but do **not** sandbox runtime behaviour — there is no path that preserves shared signals across an iframe and Realms is not here. Treat `lazyComponent({ src })` like an `npm install`: vet, pin with SRI, restrict origin, audit.
