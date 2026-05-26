@@ -41,19 +41,35 @@ export function defineComponent({ tag, setup, shadow = false }) {
     connectedCallback() {
       this.#controller = new AbortController();
       this.#root = shadow ? this.attachShadow({ mode: 'open' }) : this;
+      const root = this.#root;
 
       withScope({ signal: this.#controller.signal }, () => {
+        // Run setup BEFORE clearing so it can read existing children
+        // (e.g. to self-hydrate from no-JS fallback content).
         const view = setup(this);
-        if (view != null) /** @type {HTMLElement | ShadowRoot} */ (this.#root).append(view);
+
+        // Replace mode: setup returned a view → swap children with view.
+        // Enhance mode: setup returned null → leave existing DOM intact.
+        if (view != null) {
+          while (root.firstChild) root.removeChild(root.firstChild);
+          root.append(view);
+          this.#owned = true;
+        }
       });
     }
 
     disconnectedCallback() {
       this.#controller?.abort();
       this.#controller = null;
-      const root = this.#root;
-      while (root?.firstChild) root.removeChild(root.firstChild);
+      if (this.#owned) {
+        const root = this.#root;
+        while (root?.firstChild) root.removeChild(root.firstChild);
+        this.#owned = false;
+      }
     }
+
+    /** @type {boolean} */
+    #owned = false;
   }
   customElements.define(tag, Component);
   return Component;

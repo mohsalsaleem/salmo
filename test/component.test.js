@@ -88,4 +88,51 @@ describe('defineComponent', () => {
     expect(received).toBe(host);
     host.remove();
   });
+
+  it('replaces existing host children on upgrade (no-JS fallback pattern)', () => {
+    const tag = freshTag();
+    defineComponent({ tag, setup: () => html`<p>upgraded</p>` });
+    const host = document.createElement(tag);
+    host.innerHTML = '<p>fallback</p>';
+    document.body.append(host);
+    expect(host.innerHTML).toBe('<p>upgraded</p>');
+    host.remove();
+  });
+
+  it('setup() can read fallback children before they are replaced (self-hydration)', () => {
+    const tag = freshTag();
+    let seenBefore;
+    defineComponent({
+      tag,
+      setup(host) {
+        seenBefore = host.textContent;
+        return html`<p>after</p>`;
+      },
+    });
+    const host = document.createElement(tag);
+    host.innerHTML = '<p>fallback-text</p>';
+    document.body.append(host);
+    expect(seenBefore).toBe('fallback-text');
+    expect(host.innerHTML).toBe('<p>after</p>');
+    host.remove();
+  });
+
+  it('enhance mode: setup returning null leaves existing DOM intact', () => {
+    const tag = freshTag();
+    let clicks = 0;
+    defineComponent({
+      tag,
+      setup(host) {
+        host.querySelector('button')?.addEventListener('click', () => clicks++);
+        return null;
+      },
+    });
+    const host = document.createElement(tag);
+    host.innerHTML = '<button>original</button>';
+    document.body.append(host);
+    expect(host.innerHTML).toBe('<button>original</button>');
+    host.querySelector('button').click();
+    expect(clicks).toBe(1);
+    host.remove();
+  });
 });
