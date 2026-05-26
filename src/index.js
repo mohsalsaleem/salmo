@@ -4,3 +4,4 @@ export { html } from './html.js';
 export { withScope, getCurrentScope } from './scope.js';
 export { defineComponent } from './component.js';
 export { repeat } from './repeat.js';
+export { when } from './when.js';
