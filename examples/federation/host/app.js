@@ -1,11 +1,11 @@
 // Host bundle. Defines the page shell, owns a `tickRate` signal, and
 // declares a lazy element that loads the remote clock module on connect.
-// Both bundles import `mohsal-framework` from the same URL (per the
+// Both bundles import `salmo` from the same URL (per the
 // import map in index.html), so they share one Signal.State class.
 
 import {
   defineComponent, html, Signal, lazyComponent,
-} from 'mohsal-framework';
+} from 'salmo';
 
 const tickRate = new Signal.State(1000);
 // Stash on window so the remote can grab it. (In a real app this would

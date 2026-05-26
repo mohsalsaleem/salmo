@@ -1,4 +1,4 @@
-# mohsal-framework
+# salmo
 
 > A small, browser-native UI framework with first-class module federation,
 > TC39 Signals reactivity, vendored lit-html for templating, and zero

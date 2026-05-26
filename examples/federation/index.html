@@ -2,17 +2,17 @@
 <html lang="en">
 <head>
 	<meta charset="utf-8">
-	<title>Federation demo · mohsal-framework</title>
+	<title>Federation demo · salmo</title>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<!-- The import map is what makes federation work: every bundle that
-	     imports the bare specifier "mohsal-framework" resolves to the
+	     imports the bare specifier "salmo" resolves to the
 	     SAME URL, so the reactive core is a singleton across host and
 	     remote. Without this, signals across the two bundles wouldn't
 	     track each other. -->
 	<script type="importmap">
 	{
 		"imports": {
-			"mohsal-framework": "../../src/index.js"
+			"salmo": "../../src/index.js"
 		}
 	}
 	</script>

@@ -149,7 +149,7 @@ export function lazyComponent({
       // SSR: don't kick off the import. The client will load the
       // remote on hydration; the server emits the placeholder element
       // with whatever attributes it has, and the client takes over.
-      if (/** @type {any} */ (globalThis).__mohsal_ssr__) return;
+      if (/** @type {any} */ (globalThis).__salmo_ssr__) return;
 
       let importP = inFlight.get(src);
       if (!importP) {
@@ -165,7 +165,7 @@ export function lazyComponent({
       if (timeout > 0) {
         racers.push(new Promise((_, rej) => {
           timer = setTimeout(
-            () => rej(new Error(`mohsal-framework: load timed out after ${timeout}ms`)),
+            () => rej(new Error(`salmo: load timed out after ${timeout}ms`)),
             timeout,
           );
         }));
@@ -225,7 +225,7 @@ async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
     const url = new URL(src, /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/');
     if (!allowedOrigins.includes(url.origin)) {
       throw new Error(
-        `mohsal-framework: refusing to load ${src} — origin ${url.origin} ` +
+        `salmo: refusing to load ${src} — origin ${url.origin} ` +
         `not in allowedOrigins (${allowedOrigins.join(', ')})`
       );
     }
@@ -233,14 +233,14 @@ async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
   if (!integrity) return import(src);
 
   const m = /^(sha256|sha384|sha512)-(.+)$/.exec(integrity.trim());
-  if (!m) throw new Error(`mohsal-framework: unsupported integrity format: ${integrity}`);
+  if (!m) throw new Error(`salmo: unsupported integrity format: ${integrity}`);
   const algoName = /** @type {'SHA-256'|'SHA-384'|'SHA-512'} */ (
     { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' }[m[1]]
   );
   const expected = m[2];
 
   const res = await fetch(src);
-  if (!res.ok) throw new Error(`mohsal-framework: fetch ${src} failed (${res.status})`);
+  if (!res.ok) throw new Error(`salmo: fetch ${src} failed (${res.status})`);
   const buf = await res.arrayBuffer();
   const hashBuf = await /** @type {Crypto} */ (
     /** @type {any} */ (globalThis).crypto
@@ -248,7 +248,7 @@ async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
   const actual = arrayBufferToBase64(hashBuf);
   if (actual !== expected) {
     throw new Error(
-      `mohsal-framework: integrity check failed for ${src} ` +
+      `salmo: integrity check failed for ${src} ` +
       `(expected ${algoName.toLowerCase()}-${expected}, got ${algoName.toLowerCase()}-${actual})`
     );
   }

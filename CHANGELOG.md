@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to mohsal-framework. Pre-1.0, so the public surface may shift; everything listed below is in service of stabilising it.
+All notable changes to salmo. Pre-1.0, so the public surface may shift; everything listed below is in service of stabilising it.
 
 ## [0.1.0] — Initial public release
 
@@ -37,7 +37,7 @@ Everything that exists today, in the order the design landed.
 ### SSR
 - `setupDOM()` — installs happy-dom globals (lazy import)
 - `renderToString(tag, props?)` — server-side outerHTML
-- `__mohsal_ssr__` flag so `lazyComponent` skips its dynamic import in SSR (client hydrates)
+- `__salmo_ssr__` flag so `lazyComponent` skips its dynamic import in SSR (client hydrates)
 - Per-render cleanup verified: `connectedCallback` → `disconnectedCallback` cycle aborts effects, no leak across requests
 
 ### Security
@@ -58,4 +58,4 @@ Everything that exists today, in the order the design landed.
 - TypeScript types via JSDoc → `tsc --emitDeclarationOnly`
 - Singleton enforcement on module load
 
-[0.1.0]: https://github.com/mohsalsaleem/mohsal-framework/releases/tag/v0.1.0
+[0.1.0]: https://github.com/mohsalsaleem/salmo/releases/tag/v0.1.0

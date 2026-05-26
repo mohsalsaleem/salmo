@@ -281,7 +281,7 @@ Each registered component gets the placeholder tag `${tag}-lazy`.
 
 ### `setupDOM()`
 
-Install `document`, `window`, `customElements`, etc. as globals using `happy-dom`. Idempotent. Sets `globalThis.__mohsal_ssr__` so `lazyComponent` skips its import on the server.
+Install `document`, `window`, `customElements`, etc. as globals using `happy-dom`. Idempotent. Sets `globalThis.__salmo_ssr__` so `lazyComponent` skips its import on the server.
 
 ```ts
 setupDOM(): Promise<Window>

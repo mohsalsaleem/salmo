@@ -9,7 +9,7 @@
 
 import {
   defineComponent, html, Signal, effect,
-} from 'mohsal-framework';
+} from 'salmo';
 
 defineComponent({
   tag: 'x-remote-clock',

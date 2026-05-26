@@ -1,6 +1,6 @@
 # Security model
 
-This document is the authoritative reference for what mohsal-framework protects against, what it does not, and how to use it safely.
+This document is the authoritative reference for what salmo protects against, what it does not, and how to use it safely.
 
 ## TL;DR
 
@@ -34,7 +34,7 @@ Re-exported from lit-html. Use when you have HTML you've already sanitized (serv
 
 ### `.innerHTML = string` direct DOM assignment
 
-If you bypass the templating layer and write `el.innerHTML = userInput` directly, mohsal-framework cannot help you. **Under a Trusted Types CSP, the browser will refuse.** Without TT, the assignment goes through. This is the same trade-off every browser-side framework makes.
+If you bypass the templating layer and write `el.innerHTML = userInput` directly, salmo cannot help you. **Under a Trusted Types CSP, the browser will refuse.** Without TT, the assignment goes through. This is the same trade-off every browser-side framework makes.
 
 If you want a framework-level refusal (like our pre-Lit implementation provided), the recommended approach now is to enforce Trusted Types via CSP — see below.
 

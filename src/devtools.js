@@ -82,7 +82,7 @@ const STYLE = `
   }
 `;
 
-const HIGHLIGHT_ATTR = 'data-mohsal-devtools-highlight';
+const HIGHLIGHT_ATTR = 'data-salmo-devtools-highlight';
 
 class FrameworkDevtools extends HTMLElement {
   /** @type {ShadowRoot} */ #root;
@@ -100,9 +100,9 @@ class FrameworkDevtools extends HTMLElement {
     // Re-render every 500ms to pick up new instances / registrations.
     this.#pollId = /** @type {any} */ (setInterval(() => this.#render(), 500));
     // Style block for highlight (injected once into the host document)
-    if (!document.querySelector(`style[data-mohsal-devtools]`)) {
+    if (!document.querySelector(`style[data-salmo-devtools]`)) {
       const s = document.createElement('style');
-      s.dataset.mohsalDevtools = '';
+      s.dataset.salmoDevtools = '';
       s.textContent = `[${HIGHLIGHT_ATTR}] { outline: 2px solid #66bbff !important; outline-offset: 2px; }`;
       document.head.appendChild(s);
     }
@@ -131,7 +131,7 @@ class FrameworkDevtools extends HTMLElement {
       <style>${STYLE}</style>
       <div class="panel">
         <div class="header" data-action="toggle">
-          <strong>mohsal-framework</strong>
+          <strong>salmo</strong>
           <small>v${VERSION} · ${entries.length} federated</small>
         </div>
         ${this.#collapsed ? '' : `

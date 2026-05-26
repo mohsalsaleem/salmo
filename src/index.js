@@ -5,11 +5,11 @@
 // production, opt into `throw` so misconfigured federation fails loudly
 // at boot rather than silently producing dead reactivity later:
 //
-//   import { configure } from 'mohsal-framework';
+//   import { configure } from 'salmo';
 //   configure({ singletonViolation: 'throw' });
 
-const MARKER = '__mohsal_framework_loaded__';
-const BEHAVIOR_KEY = '__mohsal_framework_singleton_behavior__';
+const MARKER = '__salmo_loaded__';
+const BEHAVIOR_KEY = '__salmo_singleton_behavior__';
 /** @type {any} */
 const g = globalThis;
 
@@ -18,7 +18,7 @@ let singletonBehavior = g[BEHAVIOR_KEY] ?? 'warn';
 
 if (g[MARKER]) {
   const msg =
-    'mohsal-framework: a second copy of the core module is being loaded.\n' +
+    'salmo: a second copy of the core module is being loaded.\n' +
     'Signals created under one copy will NOT track signals or computeds\n' +
     'tracked under the other. Pin the framework to a single URL via an\n' +
     'import map.';

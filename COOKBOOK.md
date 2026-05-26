@@ -1,6 +1,6 @@
 # Cookbook
 
-Task-indexed recipes. Each one is the canonical answer for "how do I X with mohsal-framework?" — short code, a link to a complete example.
+Task-indexed recipes. Each one is the canonical answer for "how do I X with salmo?" — short code, a link to a complete example.
 
 ---
 

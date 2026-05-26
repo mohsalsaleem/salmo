@@ -7,7 +7,7 @@
 //   {
 //     "name": "acme-widgets",
 //     "version": "1.0.0",
-//     "framework": { "name": "mohsal-framework", "minVersion": "0.0.1" },
+//     "framework": { "name": "salmo", "minVersion": "0.0.1" },
 //     "components": [
 //       {
 //         "tag": "acme-calendar",
@@ -78,7 +78,7 @@ import { VERSION, gte } from './version.js';
 export async function loadFromManifest(manifestUrl, options = {}) {
   const res = await fetch(manifestUrl);
   if (!res.ok) {
-    throw new Error(`mohsal-framework: failed to fetch manifest at ${manifestUrl} (${res.status})`);
+    throw new Error(`salmo: failed to fetch manifest at ${manifestUrl} (${res.status})`);
   }
   /** @type {Manifest} */
   const manifest = await res.json();
@@ -92,7 +92,7 @@ export async function loadFromManifest(manifestUrl, options = {}) {
   const min = manifest.framework?.minVersion;
   if (min && !gte(VERSION, min)) {
     const msg =
-      `mohsal-framework v${VERSION} is older than the minimum required by ` +
+      `salmo v${VERSION} is older than the minimum required by ` +
       `${manifest.name}@${manifest.version} (needs >= ${min}).`;
     const policy = options.onVersionMismatch ?? 'warn';
     if (policy === 'throw') throw new Error(msg);
@@ -137,21 +137,21 @@ export async function loadFromManifest(manifestUrl, options = {}) {
  */
 function validateManifest(m, url) {
   if (!m || typeof m !== 'object') {
-    throw new Error(`mohsal-framework: manifest at ${url} is not an object`);
+    throw new Error(`salmo: manifest at ${url} is not an object`);
   }
   const mf = /** @type {any} */ (m);
   if (typeof mf.name !== 'string' || typeof mf.version !== 'string') {
-    throw new Error(`mohsal-framework: manifest at ${url} is missing required {name, version}`);
+    throw new Error(`salmo: manifest at ${url} is missing required {name, version}`);
   }
   if (!Array.isArray(mf.components)) {
-    throw new Error(`mohsal-framework: manifest at ${url} has no components array`);
+    throw new Error(`salmo: manifest at ${url} has no components array`);
   }
   for (const c of mf.components) {
     if (!c || typeof c.tag !== 'string' || typeof c.src !== 'string') {
-      throw new Error(`mohsal-framework: manifest at ${url} has a component missing {tag, src}: ${JSON.stringify(c)}`);
+      throw new Error(`salmo: manifest at ${url} has a component missing {tag, src}: ${JSON.stringify(c)}`);
     }
     if (!c.tag.includes('-')) {
-      throw new Error(`mohsal-framework: manifest at ${url} has component "${c.tag}" without a hyphen — Custom Element tags must contain one`);
+      throw new Error(`salmo: manifest at ${url} has component "${c.tag}" without a hyphen — Custom Element tags must contain one`);
     }
   }
 }

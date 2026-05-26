@@ -1,4 +1,4 @@
-// TodoMVC ported to mohsal-framework-on-Lit. Architectural difference
+// TodoMVC ported to salmo-on-Lit. Architectural difference
 // from the previous version: setup() returns a render function (not a
 // template directly), so signal reads inside it become deps of the
 // component's render effect and the component re-renders on signal
@@ -9,7 +9,7 @@ import {
   repeat, when, classMap, ref,
 } from '../../src/index.js';
 
-const STORAGE_KEY = 'mohsal-framework:todomvc';
+const STORAGE_KEY = 'salmo:todomvc';
 
 const loadInitial = () => {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? []; }

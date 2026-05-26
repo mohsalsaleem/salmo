@@ -1,6 +1,6 @@
 # Auth — what the framework does, what your app does
 
-This is a short reference for wiring authentication into apps built on mohsal-framework. **There is no auth module in `framework/src/`.** Auth is too app-specific to bundle. What we provide are the primitives (signals, context-via-closest, federation plumbing) and the patterns below — pick the one that fits your app.
+This is a short reference for wiring authentication into apps built on salmo. **There is no auth module in `framework/src/`.** Auth is too app-specific to bundle. What we provide are the primitives (signals, context-via-closest, federation plumbing) and the patterns below — pick the one that fits your app.
 
 ## TL;DR — who owns what
 

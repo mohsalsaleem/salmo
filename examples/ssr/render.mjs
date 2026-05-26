@@ -21,7 +21,7 @@ const out = `<!DOCTYPE html>
 <html lang="en">
 <head>
 \t<meta charset="utf-8">
-\t<title>SSR demo · mohsal-framework</title>
+\t<title>SSR demo · salmo</title>
 \t<meta name="viewport" content="width=device-width, initial-scale=1">
 \t<style>
 \t\tbody { font-family: system-ui, sans-serif; padding: 2rem; max-width: 720px; margin: 0 auto; }

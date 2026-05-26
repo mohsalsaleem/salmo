@@ -1,6 +1,6 @@
 # TodoMVC ergonomics report
 
-Notes from building `examples/todomvc/` against `mohsal-framework`. Everything in the canonical TodoMVC spec works end-to-end (add, toggle, filter via hash routing, edit-in-place, delete, clear-completed, localStorage persistence — all verified). The component is one file, ~140 lines, no build step. The rough edges below are about how it felt to write, not whether it works.
+Notes from building `examples/todomvc/` against `salmo`. Everything in the canonical TodoMVC spec works end-to-end (add, toggle, filter via hash routing, edit-in-place, delete, clear-completed, localStorage persistence — all verified). The component is one file, ~140 lines, no build step. The rough edges below are about how it felt to write, not whether it works.
 
 ## Worked well
 

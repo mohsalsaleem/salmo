@@ -38,7 +38,7 @@ describe('manifest version enforcement', () => {
     stubFetch({
       'http://x/m.json': {
         name: 'too-new', version: '1.0.0',
-        framework: { name: 'mohsal-framework', minVersion: '999.0.0' },
+        framework: { name: 'salmo', minVersion: '999.0.0' },
         components: [{ tag: 'too-new-foo', src: './foo.js' }],
       },
     });
@@ -51,7 +51,7 @@ describe('manifest version enforcement', () => {
     stubFetch({
       'http://x/m2.json': {
         name: 'warns', version: '1.0.0',
-        framework: { name: 'mohsal-framework', minVersion: '999.0.0' },
+        framework: { name: 'salmo', minVersion: '999.0.0' },
         components: [{ tag: 'warns-foo', src: './foo.js' }],
       },
     });
@@ -65,7 +65,7 @@ describe('manifest version enforcement', () => {
     stubFetch({
       'http://x/m3.json': {
         name: 'silent', version: '1.0.0',
-        framework: { name: 'mohsal-framework', minVersion: '999.0.0' },
+        framework: { name: 'salmo', minVersion: '999.0.0' },
         components: [{ tag: 'silent-foo', src: './foo.js' }],
       },
     });

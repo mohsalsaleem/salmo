@@ -3,9 +3,9 @@
 // customElements as globals, after which `defineComponent` /
 // `customElements.define` / `host.append` all work as in the browser.
 //
-//   import { setupDOM } from 'mohsal-framework/ssr';
+//   import { setupDOM } from 'salmo/ssr';
 //   await setupDOM();
-//   const { defineComponent, html } = await import('mohsal-framework');
+//   const { defineComponent, html } = await import('salmo');
 //   defineComponent({ tag: 'x-hi', setup: () => html`<p>hi</p>` });
 //   const el = document.createElement('x-hi');
 //   document.body.append(el);
@@ -45,7 +45,7 @@ export async function setupDOM() {
   // Mark this realm as SSR so lazyComponent skips its dynamic import
   // (the remote loads on the client during hydration; the server just
   // emits the placeholder element).
-  /** @type {any} */ (globalThis).__mohsal_ssr__ = true;
+  /** @type {any} */ (globalThis).__salmo_ssr__ = true;
   return window;
 }
 

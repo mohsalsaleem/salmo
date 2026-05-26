@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for considering it. mohsal-framework is small on purpose; the bar for adding to it is "this is in service of the framework's core thesis (browser-native federation + TC39 signals)" rather than "this is a useful feature."
+Thanks for considering it. salmo is small on purpose; the bar for adding to it is "this is in service of the framework's core thesis (browser-native federation + TC39 signals)" rather than "this is a useful feature."
 
 ## What lives in `framework/src/`
 
@@ -17,7 +17,7 @@ The three reference docs that make this concrete: [`AUTH.md`](AUTH.md), [`STATE.
 
 ```sh
 git clone <this-repo>
-cd mohsal-framework
+cd salmo
 npm install        # dev deps only: vitest, happy-dom, typescript
 ```
 

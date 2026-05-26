@@ -23,7 +23,7 @@ The principle (same as `AUTH.md`): **framework owns the primitive, app owns the 
 
 ```js
 // store/cart.js
-import { Signal } from 'mohsal-framework';
+import { Signal } from 'salmo';
 export const cartItems = new Signal.State([]);
 export const cartCount = new Signal.Computed(() => cartItems.get().length);
 ```
@@ -142,13 +142,13 @@ That's a property nothing else in the ecosystem gives you for free:
 | Zustand | Module-level, but each bundle's copy of Zustand creates separate stores unless dedup'd |
 | Pinia | Same — bundle-scoped instances |
 | Jotai atoms | Same — atom identity is by reference; needs to be the same module instance |
-| **mohsal-framework signals** | **Singleton-pinned by construction; module-level signals share across federated bundles for free** |
+| **salmo signals** | **Singleton-pinned by construction; module-level signals share across federated bundles for free** |
 
 When you want a federated remote to read or write the same piece of state as the host, the answer is "have both `import { foo } from '/store/foo.js'`" and that's it.
 
 ## Comparison to other ecosystems
 
-| | Redux | Zustand | Jotai | Solid stores | mohsal |
+| | Redux | Zustand | Jotai | Solid stores | salmo |
 |---|---|---|---|---|---|
 | Granularity | Whole-tree | Whole-store | Atom | Signal | Signal |
 | Reactivity | Subscribe + selector | Subscribe + selector | Reactive (atom) | Reactive | Reactive |

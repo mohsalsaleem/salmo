@@ -1,6 +1,6 @@
 # Federation
 
-How mohsal-framework approaches module federation, what makes it "first-class" rather than bolted-on, and what's portable to / from other frameworks.
+How salmo approaches module federation, what makes it "first-class" rather than bolted-on, and what's portable to / from other frameworks.
 
 ## What we mean by "first-class federation"
 
@@ -21,7 +21,7 @@ Most existing systems do *some* of these:
 | single-spa / qiankun | ✅ | ❌ | ❌ | ❌ | partial | needs bundler |
 | iframe orchestration | ✅ | ❌ (postMessage only) | partial | ❌ | ❌ | ✅ |
 | Custom Elements directly | ✅ | ❌ (no shared state) | ❌ | ❌ | ❌ | ✅ |
-| **mohsal-framework** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **salmo** | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 The asset is (2). Everyone else either fights the boundary (Module Federation, single-spa) or chooses isolation over composition (iframes). We choose composition and accept the trust model — see `SECURITY.md`.
 
@@ -59,10 +59,10 @@ The signal interpolated in `.item=${signal}` is the **same JS object** the remot
 
 | Direction | Status | Notes |
 |---|---|---|
-| **mohsal host loads a vanilla Custom Element** | ✅ works today | The DOM is the contract. `lazyComponent` doesn't care what registered the tag — Lit, vanilla, Stencil, Solid-Element, whoever. |
-| **mohsal host loads a Lit component** | ✅ works today | LitElements are Custom Elements. Properties / events flow normally. |
-| **A non-mohsal host loads a mohsal component** | ✅ works today | Our components are Custom Elements. Any browser page that can do `<x-foo></x-foo>` works. |
-| **Signal sharing between mohsal and non-mohsal** | ⚠️ limited | Signals are JS object references; they don't survive into a framework that doesn't import our Signal class. Communication degrades to events + attributes. |
+| **salmo host loads a vanilla Custom Element** | ✅ works today | The DOM is the contract. `lazyComponent` doesn't care what registered the tag — Lit, vanilla, Stencil, Solid-Element, whoever. |
+| **salmo host loads a Lit component** | ✅ works today | LitElements are Custom Elements. Properties / events flow normally. |
+| **A non-salmo host loads a salmo component** | ✅ works today | Our components are Custom Elements. Any browser page that can do `<x-foo></x-foo>` works. |
+| **Signal sharing between salmo and non-salmo** | ⚠️ limited | Signals are JS object references; they don't survive into a framework that doesn't import our Signal class. Communication degrades to events + attributes. |
 | **Both sides import our `Signal` class** | ✅ works today | Even if the rest of the app is React or Vue, if both sides happen to share our `Signal` via import map, they share reactive state. |
 
 The asymmetry is worth seeing clearly: **the DOM is universal; signals are our extension**. Federation works for markup and events with anyone. Live reactive sharing requires both sides to agree on a Signal implementation.

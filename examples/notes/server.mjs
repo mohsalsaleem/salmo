@@ -118,7 +118,7 @@ const renderPage = (initialState) => {
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Notes · mohsal-framework</title>
+  <title>Notes · salmo</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     body { font-family: system-ui, sans-serif; margin: 0; background: #f7f7f8; color: #222; }

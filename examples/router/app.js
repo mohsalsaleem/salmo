@@ -60,11 +60,11 @@ defineComponent({
         `)}
         ${when(here() === '/about', () => html`
           <h2>About</h2>
-          <p>Built on mohsal-framework with zero router primitives.</p>
+          <p>Built on salmo with zero router primitives.</p>
         `)}
         ${when(here() === '/contact', () => html`
           <h2>Contact</h2>
-          <p>Find me at mohsal.dev.</p>
+          <p>This is a static contact page rendered by the router.</p>
         `)}
       </section>
 
