@@ -24,13 +24,13 @@ describe('Signal.subtle.untrack', () => {
 });
 
 describe('Signal.subtle.currentComputed', () => {
-  it('returns the active Computed during evaluation, else null', () => {
-    expect(Signal.subtle.currentComputed()).toBe(null);
+  it('returns the active Computed during evaluation, else undefined', () => {
+    expect(Signal.subtle.currentComputed()).toBe(undefined);
     let inside;
     const c = new Signal.Computed(() => { inside = Signal.subtle.currentComputed(); return 1; });
     c.get();
     expect(inside).toBe(c);
-    expect(Signal.subtle.currentComputed()).toBe(null);
+    expect(Signal.subtle.currentComputed()).toBe(undefined);
   });
 });
 

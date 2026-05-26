@@ -1,28 +1,40 @@
 // A from-scratch implementation of the TC39 Signals proposal.
 // https://github.com/tc39/proposal-signals
 //
-// We expose a `Signal` namespace with:
-//   - Signal.State    — writable reactive cell
-//   - Signal.Computed — derived value, lazy + memoised
-//   - Signal.subtle.* — low-level hooks for frameworks (added later)
+// Internals follow the 3-state lazy-validation model used by Solid /
+// Vue / Preact / the polyfill: a Computed is CLEAN, CHECK, or DIRTY.
+// State changes mark direct subscribers DIRTY and transitive subs
+// CHECK. On read, a CHECK Computed re-validates its deps by version
+// number — if no dep's value actually changed, it stays CLEAN and
+// downstream subs never re-run (this is what custom equality buys).
+
+const CLEAN = 0;
+const CHECK = 1;
+const DIRTY = 2;
 
 /**
  * @typedef {Object} Subscriber
- * @property {() => void} _markDirty
- * @property {(dep: Source) => void} [_addDep]
+ * @property {(mark: 1 | 2) => void} _notify
+ * @property {(source: Source, version: number) => void} [_trackDep]
  */
 
 /**
  * @typedef {Object} Source
  * @property {(sub: Subscriber) => void} _addSub
  * @property {(sub: Subscriber) => void} _removeSub
- * @property {() => boolean} [_isDirty]
+ * @property {() => number} _version
+ * @property {() => void} _validate
+ * @property {() => boolean} [_isPending]
  */
 
-// The signal currently being evaluated. When a State or Computed is read
-// inside this context, the relationship is recorded so reads auto-track.
 /** @type {Subscriber | null} */
 let currentObserver = null;
+
+/**
+ * @template T
+ * @typedef {Object} EqualsOptions
+ * @property {(a: T, b: T) => boolean} [equals]
+ */
 
 /**
  * @template T
@@ -32,34 +44,44 @@ class State {
   #value;
   /** @type {Set<Subscriber>} */
   #subs = new Set();
+  /** @type {(a: T, b: T) => boolean} */
+  #equals;
+  #version = 0;
 
-  /** @param {T} value */
-  constructor(value) { this.#value = value; }
+  /**
+   * @param {T} value
+   * @param {EqualsOptions<T>} [options]
+   */
+  constructor(value, options = {}) {
+    this.#value = value;
+    this.#equals = options.equals ?? Object.is;
+  }
 
   /** @returns {T} */
   get() {
     if (currentObserver) {
       this.#subs.add(currentObserver);
-      currentObserver._addDep?.(this);
+      currentObserver._trackDep?.(this, this.#version);
     }
     return this.#value;
   }
 
   /** @param {T} value */
   set(value) {
-    if (Object.is(value, this.#value)) return;
+    if (this.#equals.call(this, this.#value, value)) return;
     this.#value = value;
-    for (const sub of [...this.#subs]) sub._markDirty();
+    this.#version++;
+    for (const sub of [...this.#subs]) sub._notify(DIRTY);
   }
 
-  /** @param {Subscriber} sub */
-  _addSub(sub) { this.#subs.add(sub); }
-  /** @param {Subscriber} sub */
-  _removeSub(sub) { this.#subs.delete(sub); }
-  /** Iteration accessor used by Signal.subtle.introspectSinks. */
+  // Internal source interface ---------------------------------------------
+  /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
+  /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
   _subsArray() { return [...this.#subs]; }
-  /** Used by Signal.subtle.hasSinks. */
   _hasSubs() { return this.#subs.size > 0; }
+  _version() { return this.#version; }
+  /** States are always valid — nothing to validate. */
+  _validate() {}
 }
 
 /**
@@ -70,56 +92,107 @@ class Computed {
   #fn;
   /** @type {T | undefined} */
   #value;
-  #dirty = true;
-  /** @type {Set<Source>} */
-  #deps = new Set();
+  /** @type {(a: T, b: T) => boolean} */
+  #equals;
+  #version = 0;
+  #everComputed = false;
+  /** @type {0 | 1 | 2} */
+  #state = DIRTY;
+  /** @type {Map<Source, number>} */
+  #deps = new Map();
   /** @type {Set<Subscriber>} */
   #subs = new Set();
 
-  /** @param {() => T} fn */
-  constructor(fn) { this.#fn = fn; }
+  /**
+   * @param {() => T} fn
+   * @param {EqualsOptions<T>} [options]
+   */
+  constructor(fn, options = {}) {
+    this.#fn = fn;
+    this.#equals = options.equals ?? Object.is;
+  }
 
   /** @returns {T} */
   get() {
+    this.#validate();
     if (currentObserver) {
       this.#subs.add(currentObserver);
-      currentObserver._addDep?.(this);
-    }
-    if (this.#dirty) {
-      // Drop stale dep links — we rebuild them as we re-run.
-      for (const dep of this.#deps) dep._removeSub(this);
-      this.#deps.clear();
-
-      const prev = currentObserver;
-      currentObserver = this;
-      try { this.#value = this.#fn(); }
-      finally { currentObserver = prev; }
-
-      this.#dirty = false;
+      currentObserver._trackDep?.(this, this.#version);
     }
     return /** @type {T} */ (this.#value);
   }
 
-  /** @param {Source} dep */
-  _addDep(dep) { this.#deps.add(dep); }
-
-  _markDirty() {
-    if (this.#dirty) return;
-    this.#dirty = true;
-    for (const sub of [...this.#subs]) sub._markDirty();
+  #validate() {
+    if (this.#state === CLEAN) return;
+    if (this.#state === CHECK) {
+      // Each dep may itself be CHECK — validate it first, then look at
+      // whether its version moved. Only an actual value change (which
+      // is what bumps version) promotes us to DIRTY.
+      for (const [dep, recordedVersion] of this.#deps) {
+        dep._validate();
+        if (dep._version() !== recordedVersion) {
+          this.#state = DIRTY;
+          break;
+        }
+      }
+      if (this.#state === CHECK) {
+        this.#state = CLEAN;
+        return;
+      }
+    }
+    this.#recompute();
   }
 
-  _isDirty() { return this.#dirty; }
-  /** @param {Subscriber} sub */
-  _addSub(sub) { this.#subs.add(sub); }
-  /** @param {Subscriber} sub */
-  _removeSub(sub) { this.#subs.delete(sub); }
-  /** Iteration accessor used by Signal.subtle.introspectSinks. */
+  #recompute() {
+    // Tear down old subscriptions; the run rebuilds them.
+    for (const dep of this.#deps.keys()) dep._removeSub(this);
+    this.#deps.clear();
+
+    const prev = currentObserver;
+    currentObserver = this;
+    /** @type {T} */
+    let next;
+    try { next = this.#fn(); }
+    finally { currentObserver = prev; }
+
+    // First compute always stores the value (no prior value to compare).
+    if (!this.#everComputed || !this.#equals.call(this, /** @type {T} */ (this.#value), next)) {
+      this.#value = next;
+      this.#version++;
+    }
+    this.#everComputed = true;
+    this.#state = CLEAN;
+  }
+
+  // Subscriber interface --------------------------------------------------
+  /** @param {1 | 2} mark */
+  _notify(mark) {
+    if (mark === DIRTY) {
+      if (this.#state === DIRTY) return;
+      const wasClean = this.#state === CLEAN;
+      this.#state = DIRTY;
+      if (wasClean) {
+        for (const sub of [...this.#subs]) sub._notify(CHECK);
+      }
+    } else {
+      if (this.#state !== CLEAN) return;
+      this.#state = CHECK;
+      for (const sub of [...this.#subs]) sub._notify(CHECK);
+    }
+  }
+
+  /** @param {Source} source @param {number} version */
+  _trackDep(source, version) { this.#deps.set(source, version); }
+
+  // Source interface ------------------------------------------------------
+  /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
+  /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
   _subsArray() { return [...this.#subs]; }
-  /** Used by Signal.subtle.hasSinks. */
   _hasSubs() { return this.#subs.size > 0; }
-  /** Iteration accessor used by Signal.subtle.introspectSources. */
-  _depsArray() { return [...this.#deps]; }
+  _version() { return this.#version; }
+  _validate() { this.#validate(); }
+  _isPending() { return this.#state !== CLEAN; }
+  _depsArray() { return [...this.#deps.keys()]; }
 }
 
 class Watcher {
@@ -154,28 +227,28 @@ class Watcher {
 
   /** @returns {Source[]} */
   getPending() {
-    return [...this.#watching].filter(s => s._isDirty?.());
+    return [...this.#watching].filter((s) => s._isPending?.());
   }
 
-  _markDirty() {
+  /** @param {1 | 2} _mark */
+  _notify(_mark) {
     if (!this.#armed) return;
     this.#armed = false;
-    // Per the proposal: notify runs in an untracked context.
     const prev = currentObserver;
     currentObserver = null;
-    try { this.#notify(); }
+    try { this.#notify.call(this); }
     finally { currentObserver = prev; }
   }
 
-  // Watchers are never themselves observed.
-  _addDep() {}
-  /** Iteration accessor used by Signal.subtle.introspectSources. */
+  // Watchers don't track deps — they only sit at the bottom.
+  _trackDep() {}
+
   _sourcesArray() { return [...this.#watching]; }
 }
 
+// Public Signal.subtle surface ------------------------------------------
+
 /**
- * Get the signals a Watcher is watching, or the signals a Computed
- * currently depends on. Throws TypeError for anything else.
  * @param {unknown} x
  * @returns {unknown[]}
  */
@@ -186,7 +259,6 @@ function introspectSources(x) {
 }
 
 /**
- * Get the downstream subscribers of a State or Computed.
  * @param {unknown} x
  * @returns {unknown[]}
  */
@@ -205,7 +277,6 @@ function hasSinks(x) {
 }
 
 /**
- * Run `fn` outside any reactive observer — reads inside don't track.
  * @template T
  * @param {() => T} fn
  * @returns {T}
@@ -217,14 +288,11 @@ function untrack(fn) {
   finally { currentObserver = prev; }
 }
 
-/**
- * The Computed currently being evaluated, or null if no tracking is active.
- * @returns {Computed<unknown> | null}
- */
+/** @returns {Computed<unknown> | undefined} */
 function currentComputed() {
-  return /** @type {Computed<unknown> | null} */ (
-    currentObserver instanceof Computed ? currentObserver : null
-  );
+  return currentObserver instanceof Computed
+    ? /** @type {Computed<unknown>} */ (currentObserver)
+    : undefined;
 }
 
 export const Signal = {
