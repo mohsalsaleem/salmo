@@ -49,6 +49,7 @@ export { html, render, svg, nothing } from '../vendor/lit-html/lit-html.js';
 export { repeat } from '../vendor/lit-html/directives/repeat.js';
 export { when } from '../vendor/lit-html/directives/when.js';
 export { classMap } from '../vendor/lit-html/directives/class-map.js';
+export { styleMap } from '../vendor/lit-html/directives/style-map.js';
 export { ref } from '../vendor/lit-html/directives/ref.js';
 export { unsafeHTML } from '../vendor/lit-html/directives/unsafe-html.js';
 
