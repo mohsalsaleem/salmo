@@ -110,4 +110,22 @@ describe('defineComponent props', () => {
     expect(received).toEqual({ id: 7 });
     parent.remove();
   });
+
+  it('emit(type, detail) is the third setup arg; dispatches a bubbling CustomEvent on host', () => {
+    let captured;
+    defineComponent({
+      tag: 'x-emitter-1',
+      setup: (_host, _props, emit) =>
+        html`<button onclick=${() => emit('done', { ok: true })}>go</button>`,
+    });
+    defineComponent({
+      tag: 'x-emitter-parent-1',
+      setup: () => html`<x-emitter-1 ondone=${(/** @type {CustomEvent} */ e) => { captured = e.detail; }}></x-emitter-1>`,
+    });
+    const parent = document.createElement('x-emitter-parent-1');
+    document.body.append(parent);
+    parent.querySelector('button').click();
+    expect(captured).toEqual({ ok: true });
+    parent.remove();
+  });
 });

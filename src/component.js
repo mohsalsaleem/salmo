@@ -23,11 +23,14 @@ import { Signal } from './signal.js';
  * @typedef {Object} ComponentSpec
  * @property {string} tag
  *   Custom element tag (must contain a hyphen).
- * @property {(host: HTMLElement, props: Record<string, InstanceType<typeof Signal.State<unknown>>>) => SetupResult} setup
- *   Called on connect. Receives the host element and a `props` bag of
- *   Signals (one per name declared in `props`). Return a DocumentFragment
- *   (typically from html``) and the framework will append it to the host
- *   (or shadowRoot). Return null to skip the swap entirely.
+ * @property {(host: HTMLElement, props: Record<string, InstanceType<typeof Signal.State<unknown>>>, emit: (type: string, detail?: unknown) => void) => SetupResult} setup
+ *   Called on connect. Receives the host element, a `props` bag of
+ *   Signals (one per name declared in `props`), and an `emit(type, detail)`
+ *   that dispatches a bubbling CustomEvent — the sanctioned outbound
+ *   channel for child-to-parent communication.
+ *   Return a DocumentFragment (typically from html``) and the framework
+ *   will append it to the host (or shadowRoot). Return null to skip the
+ *   swap entirely.
  * @property {boolean} [shadow]
  *   Opt into Shadow DOM. Default false.
  * @property {readonly string[]} [props]
@@ -67,11 +70,22 @@ export function defineComponent({ tag, setup, shadow = false, props = [] }) {
       this.#controller = new AbortController();
       this.#root = shadow ? this.attachShadow({ mode: 'open' }) : this;
       const root = this.#root;
+      // emit(type, detail) — sanctioned outbound channel. Bubbles by
+      // default so parent on*=${} handlers catch it regardless of how
+      // the host is wrapped.
+      /** @type {(type: string, detail?: unknown) => void} */
+      const emit = (type, detail) => {
+        this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true }));
+      };
 
       withScope({ signal: this.#controller.signal }, () => {
         // Run setup BEFORE clearing so it can read existing children
         // (e.g. to self-hydrate from no-JS fallback content).
-        const view = setup(this, /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */ (propBags.get(this) ?? {}));
+        const view = setup(
+          this,
+          /** @type {Record<string, InstanceType<typeof Signal.State<unknown>>>} */ (propBags.get(this) ?? {}),
+          emit,
+        );
 
         if (view != null) {
           while (root.firstChild) root.removeChild(root.firstChild);
