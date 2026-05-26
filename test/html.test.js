@@ -94,6 +94,32 @@ describe('html', () => {
     expect(div.textContent).toBe('world');
   });
 
+  it('binds DOM properties via .propName syntax (works for checkbox.checked)', async () => {
+    const checked = new Signal.State(true);
+    const div = mount(html`<input type="checkbox" .checked=${checked}>`);
+    const box = div.querySelector('input');
+    expect(box.checked).toBe(true);
+
+    checked.set(false);
+    await tick();
+    expect(box.checked).toBe(false);
+
+    checked.set(true);
+    await tick();
+    expect(box.checked).toBe(true);
+  });
+
+  it('binds DOM properties to input.value reactively', async () => {
+    const text = new Signal.State('one');
+    const div = mount(html`<input .value=${text}>`);
+    const input = div.querySelector('input');
+    expect(input.value).toBe('one');
+
+    text.set('two');
+    await tick();
+    expect(input.value).toBe('two');
+  });
+
   it('removes event listeners on scope abort', () => {
     const ctrl = new AbortController();
     let clicks = 0;

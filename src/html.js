@@ -91,6 +91,20 @@ function bindAttributes(frag, values, deferred) {
         continue;
       }
 
+      // .propName=${value} — bind to the DOM property, not the HTML
+      // attribute. Needed for things HTML attributes can't express:
+      // `checked` toggling, `value` updating after first paint, anything
+      // where the parser-time attribute and the live property diverge.
+      if (attr.name.startsWith('.') && isWhole) {
+        const propName = attr.name.slice(1);
+        const idx = +matches[0][1];
+        el.removeAttribute(attr.name);
+        deferred.push(() => effect(() => {
+          /** @type {any} */ (el)[propName] = readValue(values[idx]);
+        }));
+        continue;
+      }
+
       const tmpl = attr.value;
       const name = attr.name;
       deferred.push(() => effect(() => {
