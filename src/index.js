@@ -28,3 +28,4 @@ export { effect } from './effect.js';
 export { withScope, getCurrentScope } from './scope.js';
 export { defineComponent } from './component.js';
 export { lazyComponent } from './lazy.js';
+export { loadFromManifest } from './manifest.js';
