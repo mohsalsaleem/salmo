@@ -15,6 +15,7 @@
   "scripts": {
     "test": "vitest",
     "test:run": "vitest run",
+    "test:conformance": "vitest run -c vitest.conformance.config.js",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.types-test.json",
     "types": "tsc"
   },
