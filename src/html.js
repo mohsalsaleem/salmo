@@ -49,7 +49,15 @@ export function html(strings, ...values) {
   );
   const tpl = /** @type {HTMLTemplateElement} */ (document.createElement('template'));
   tpl.innerHTML = src;
-  const frag = tpl.content;
+  // <template>.content lives in a separate inert document where Custom
+  // Elements stay in "pending" state — `customElements.upgrade()`
+  // doesn't reach across document boundaries. importNode clones into
+  // the main document, which DOES upgrade custom elements, so
+  // .prop=${} bindings in the deferred phase below go through the
+  // upgraded setter rather than landing as plain expando properties.
+  const frag = typeof document.importNode === 'function'
+    ? document.importNode(tpl.content, true)
+    : tpl.content;
   /** @type {Array<() => void>} */
   const deferred = [];
 
