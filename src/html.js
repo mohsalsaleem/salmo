@@ -105,6 +105,66 @@ function bindAttributes(frag, values, deferred) {
         continue;
       }
 
+      // class:name=${signal} — reactively toggle a single class.
+      // Coexists with a static `class="..."` attribute on the same
+      // element; this never overwrites that.
+      if (attr.name.startsWith('class:') && isWhole) {
+        const className = attr.name.slice('class:'.length);
+        const idx = +matches[0][1];
+        el.removeAttribute(attr.name);
+        deferred.push(() => effect(() => {
+          el.classList.toggle(className, !!readValue(values[idx]));
+        }));
+        continue;
+      }
+
+      // :propName=${signal} — two-way bind a DOM property to a
+      // Signal.State. Equivalent to writing the property binding AND
+      // the matching input/change handler yourself.
+      if (attr.name.startsWith(':') && isWhole) {
+        const propName = attr.name.slice(1);
+        const idx = +matches[0][1];
+        const signal = /** @type {{ set(v: unknown): void; get(): unknown }} */ (
+          /** @type {unknown} */ (values[idx])
+        );
+        el.removeAttribute(attr.name);
+        deferred.push(() => effect(() => {
+          /** @type {any} */ (el)[propName] = readValue(signal);
+        }));
+        const eventName = propName === 'checked' || propName === 'selected' ? 'change' : 'input';
+        const handler = (/** @type {Event} */ e) => {
+          signal.set(/** @type {any} */ (e.target)[propName]);
+        };
+        el.addEventListener(eventName, handler);
+        const sig = getCurrentScope()?.signal;
+        sig?.addEventListener(
+          'abort',
+          () => el.removeEventListener(eventName, handler),
+          { once: true }
+        );
+        continue;
+      }
+
+      // ref=${cb} — runs once in the next microtask, by which time the
+      // surrounding fragment has been inserted into the DOM. cb may
+      // return a cleanup function that fires when the surrounding
+      // scope's AbortSignal aborts (e.g. component disconnect).
+      if (attr.name === 'ref' && isWhole) {
+        const cb = /** @type {(el: Element) => (() => void) | void} */ (
+          values[+matches[0][1]]
+        );
+        el.removeAttribute(attr.name);
+        const signal = getCurrentScope()?.signal;
+        queueMicrotask(() => {
+          if (signal?.aborted) return;
+          const cleanup = cb(el);
+          if (typeof cleanup === 'function') {
+            signal?.addEventListener('abort', cleanup, { once: true });
+          }
+        });
+        continue;
+      }
+
       const tmpl = attr.value;
       const name = attr.name;
       deferred.push(() => effect(() => {

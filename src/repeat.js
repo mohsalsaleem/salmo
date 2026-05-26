@@ -17,7 +17,7 @@ import { withScope, getCurrentScope } from './scope.js';
  * @returns {() => Node[]}
  */
 export function repeat(source, keyFn, renderFn) {
-  /** @type {Map<K, { nodes: Node[]; controller: AbortController }>} */
+  /** @type {Map<K, { item: T; nodes: Node[]; controller: AbortController }>} */
   const byKey = new Map();
   // Captured at creation time — when the surrounding component's scope
   // aborts, every per-item controller has to abort too so effects and
@@ -37,24 +37,30 @@ export function repeat(source, keyFn, renderFn) {
       seen.add(key);
 
       let entry = byKey.get(key);
-      if (!entry) {
+      // Reuse only when the item reference is identical. If the caller
+      // produced a new object (the common functional-update pattern), the
+      // closure inside renderFn has stale data and the row must be
+      // re-rendered. Same key + same reference is the cheap path.
+      if (!entry || entry.item !== item) {
+        if (entry) entry.controller.abort();
         const controller = new AbortController();
         parentSignal?.addEventListener('abort', () => controller.abort(), { once: true });
         /** @type {Node[]} */
         let nodes = [];
         withScope({ signal: controller.signal }, () => {
           const result = renderFn(item, i);
-          // DocumentFragment unwraps to its children; any Node passes through.
           if (/** @type {any} */ (result)?.nodeType === 11) {
             nodes = [.../** @type {DocumentFragment} */ (result).childNodes];
           } else {
             nodes = [/** @type {Node} */ (result)];
           }
         });
-        entry = { nodes, controller };
-        byKey.set(key, entry);
+        const fresh = { item, nodes, controller };
+        byKey.set(key, fresh);
+        out.push(...fresh.nodes);
+      } else {
+        out.push(...entry.nodes);
       }
-      out.push(...entry.nodes);
     }
 
     for (const [key, entry] of byKey) {

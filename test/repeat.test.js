@@ -17,42 +17,64 @@ describe('repeat()', () => {
     expect(div.querySelector('ul').textContent).toBe('abc');
   });
 
-  it('reuses the same DOM node for an unchanged key across re-renders', async () => {
-    const items = new Signal.State([{ id: 1, text: 'a' }, { id: 2, text: 'b' }]);
+  it('reuses the same DOM node when both the key AND the item reference are unchanged', async () => {
+    const a = { id: 1, text: 'a' };
+    const b = { id: 2, text: 'b' };
+    const items = new Signal.State([a, b]);
     const div = mount(html`<ul>${repeat(items, (t) => t.id, (t) => html`<li>${t.text}</li>`)}</ul>`);
-    const liBefore = div.querySelector('ul').children[1]; // id=2
+    const liBefore = div.querySelector('ul').children[1]; // b
 
-    items.set([{ id: 1, text: 'a' }, { id: 2, text: 'b' }, { id: 3, text: 'c' }]);
+    // Append a new item but keep a and b by reference.
+    items.set([a, b, { id: 3, text: 'c' }]);
     await tick();
     const liAfter = div.querySelector('ul').children[1];
-    expect(liAfter).toBe(liBefore); // same node reused
+    expect(liAfter).toBe(liBefore);
+  });
+
+  it('re-renders a row when its item reference changes (functional updates)', async () => {
+    const items = new Signal.State([{ id: 1, text: 'a' }]);
+    const div = mount(html`<ul>${repeat(items, (t) => t.id, (t) => html`<li>${t.text}</li>`)}</ul>`);
+    expect(div.querySelector('ul').textContent).toBe('a');
+
+    // Same key, new object — text should update.
+    items.set([{ id: 1, text: 'b' }]);
+    await tick();
+    expect(div.querySelector('ul').textContent).toBe('b');
   });
 
   it('removes nodes whose keys disappear', async () => {
-    const items = new Signal.State([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    const a = { id: 1 };
+    const b = { id: 2 };
+    const c = { id: 3 };
+    const items = new Signal.State([a, b, c]);
     const div = mount(html`<ul>${repeat(items, (t) => t.id, (t) => html`<li>${t.id}</li>`)}</ul>`);
     expect(div.querySelector('ul').textContent).toBe('123');
 
-    items.set([{ id: 1 }, { id: 3 }]);
+    items.set([a, c]);
     await tick();
     expect(div.querySelector('ul').textContent).toBe('13');
   });
 
   it('reorders existing nodes without re-creating them', async () => {
-    const items = new Signal.State([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    const a = { id: 1 };
+    const b = { id: 2 };
+    const c = { id: 3 };
+    const items = new Signal.State([a, b, c]);
     const div = mount(html`<ul>${repeat(items, (t) => t.id, (t) => html`<li>${t.id}</li>`)}</ul>`);
     const lis = [...div.querySelector('ul').children];
 
-    items.set([{ id: 3 }, { id: 1 }, { id: 2 }]);
+    items.set([c, a, b]);
     await tick();
     const reordered = [...div.querySelector('ul').children];
-    expect(reordered[0]).toBe(lis[2]); // node 3 moved to front
+    expect(reordered[0]).toBe(lis[2]);
     expect(reordered[1]).toBe(lis[0]);
     expect(reordered[2]).toBe(lis[1]);
   });
 
   it('preserves DOM state (focus) on a reused node across unrelated updates', async () => {
-    const items = new Signal.State([{ id: 1 }, { id: 2 }]);
+    const a = { id: 1 };
+    const b = { id: 2 };
+    const items = new Signal.State([a, b]);
     const div = mount(
       html`<ul>${repeat(items, (t) => t.id, (t) => html`<li><input data-id=${t.id}></li>`)}</ul>`,
     );
@@ -61,10 +83,9 @@ describe('repeat()', () => {
     input2.focus();
     expect(document.activeElement).toBe(input2);
 
-    // Mutate the list (push a new id) — id=2's node should NOT be re-created.
-    items.set([{ id: 1 }, { id: 2 }, { id: 3 }]);
+    items.set([a, b, { id: 3 }]); // a and b unchanged → reused
     await tick();
-    expect(document.activeElement).toBe(input2); // still focused
+    expect(document.activeElement).toBe(input2);
     document.body.removeChild(div);
   });
 
