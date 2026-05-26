@@ -1,14 +1,4 @@
-// Singleton enforcement — the reactive core has module-level state
-// (currentObserver, inNotify, currentScope). Two copies of this module
-// in one page would each carry their own version of that state, and
-// signals tracked under one observer would not notify computeds being
-// tracked under the other. Federation needs ONE instance shared across
-// all bundles (achieved via an import map in the host page).
-//
-// The check is informational, not fatal — it warns clearly on the
-// second load so the misconfiguration surfaces immediately instead of
-// silently producing dead reactivity.
-
+// Singleton enforcement — see signal.js comment.
 const MARKER = '__mohsal_framework_loaded__';
 /** @type {any} */
 const g = globalThis;
@@ -16,23 +6,26 @@ if (g[MARKER]) {
   // eslint-disable-next-line no-console
   console.warn(
     'mohsal-framework: a second copy of the core module is being loaded.\n' +
-    'Signals created under one copy will not notify computeds tracked\n' +
-    'under the other. Pin the framework to a single URL via an import map:\n' +
-    '  <script type="importmap">' +
-    '{ "imports": { "mohsal-framework": "/framework/src/index.js" } }' +
-    '</script>'
+    'Pin to a single URL via an import map.'
   );
 } else {
   g[MARKER] = true;
 }
 
+// === From lit-html: templating + standard directives. ===
+// We re-export the bare names so consumer code uses the same import
+// regardless of substrate. If we ever swap engines, this is the one
+// place that changes.
+export { html, render, svg, nothing } from 'lit-html';
+export { repeat } from 'lit-html/directives/repeat.js';
+export { when } from 'lit-html/directives/when.js';
+export { classMap } from 'lit-html/directives/class-map.js';
+export { ref } from 'lit-html/directives/ref.js';
+export { unsafeHTML } from 'lit-html/directives/unsafe-html.js';
+
+// === Ours: the parts Lit doesn't provide or that we want to control. ===
 export { Signal } from './signal.js';
 export { effect } from './effect.js';
-export { html } from './html.js';
 export { withScope, getCurrentScope } from './scope.js';
 export { defineComponent } from './component.js';
-export { repeat } from './repeat.js';
-export { when } from './when.js';
 export { lazyComponent } from './lazy.js';
-export { unsafe } from './unsafe.js';
-export { getPolicy, trustHTML } from './trusted-types.js';
