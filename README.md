@@ -99,6 +99,7 @@ node examples/notes/e2e.mjs       # end-to-end test
 | Understand the federation model | [`FEDERATION.md`](FEDERATION.md) |
 | Handle auth in your app | [`AUTH.md`](AUTH.md) |
 | Manage global state | [`STATE.md`](STATE.md) |
+| Server-render and the road to hydration | [`SSR.md`](SSR.md) |
 | Audit the security posture | [`SECURITY.md`](SECURITY.md) |
 | LLM-friendly project summary | [`llms.txt`](llms.txt) |
 
