@@ -97,7 +97,15 @@ export function defineComponent({ tag, setup, shadow = false, props = [], onErro
 
     connectedCallback() {
       this.#controller = new AbortController();
-      this.#root = shadow ? this.attachShadow({ mode: 'open' }) : this;
+      // For shadow=true: respect an already-attached shadow root, which
+      // is how the browser hands us SSR'd <template shadowrootmode="open">
+      // content. Calling attachShadow again on a host that already has
+      // one throws — so reuse what's there. The first reactive render
+      // replaces the SSR'd shadow content with the live template, but
+      // the user has already seen styled content before JS booted.
+      this.#root = shadow
+        ? (this.shadowRoot ?? this.attachShadow({ mode: 'open' }))
+        : this;
       const root = this.#root;
       /** @type {(type: string, detail?: unknown) => void} */
       const emit = (type, detail) => {
