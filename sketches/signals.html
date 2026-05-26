@@ -127,8 +127,8 @@ function html(strings, ...values) {
 
 function toNodes(v) {
   if (v == null || v === false) return [];
-  if (v instanceof Node) return [v];
   if (v instanceof DocumentFragment) return [...v.childNodes];
+  if (v instanceof Node) return [v];
   if (Array.isArray(v)) return v.flatMap(toNodes);
   return [document.createTextNode(String(v))];
 }
