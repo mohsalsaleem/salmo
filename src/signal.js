@@ -56,6 +56,10 @@ class State {
   _addSub(sub) { this.#subs.add(sub); }
   /** @param {Subscriber} sub */
   _removeSub(sub) { this.#subs.delete(sub); }
+  /** Iteration accessor used by Signal.subtle.introspectSinks. */
+  _subsArray() { return [...this.#subs]; }
+  /** Used by Signal.subtle.hasSinks. */
+  _hasSubs() { return this.#subs.size > 0; }
 }
 
 /**
@@ -110,6 +114,12 @@ class Computed {
   _addSub(sub) { this.#subs.add(sub); }
   /** @param {Subscriber} sub */
   _removeSub(sub) { this.#subs.delete(sub); }
+  /** Iteration accessor used by Signal.subtle.introspectSinks. */
+  _subsArray() { return [...this.#subs]; }
+  /** Used by Signal.subtle.hasSinks. */
+  _hasSubs() { return this.#subs.size > 0; }
+  /** Iteration accessor used by Signal.subtle.introspectSources. */
+  _depsArray() { return [...this.#deps]; }
 }
 
 class Watcher {
@@ -159,6 +169,73 @@ class Watcher {
 
   // Watchers are never themselves observed.
   _addDep() {}
+  /** Iteration accessor used by Signal.subtle.introspectSources. */
+  _sourcesArray() { return [...this.#watching]; }
 }
 
-export const Signal = { State, Computed, subtle: { Watcher } };
+/**
+ * Get the signals a Watcher is watching, or the signals a Computed
+ * currently depends on. Throws TypeError for anything else.
+ * @param {unknown} x
+ * @returns {unknown[]}
+ */
+function introspectSources(x) {
+  if (x instanceof Watcher) return x._sourcesArray();
+  if (x instanceof Computed) return x._depsArray();
+  throw new TypeError('Signal.subtle.introspectSources expects a Watcher or Computed');
+}
+
+/**
+ * Get the downstream subscribers of a State or Computed.
+ * @param {unknown} x
+ * @returns {unknown[]}
+ */
+function introspectSinks(x) {
+  if (x instanceof State || x instanceof Computed) return x._subsArray();
+  throw new TypeError('Signal.subtle.introspectSinks expects a State or Computed');
+}
+
+/**
+ * @param {unknown} x
+ * @returns {boolean}
+ */
+function hasSinks(x) {
+  if (x instanceof State || x instanceof Computed) return x._hasSubs();
+  throw new TypeError('Signal.subtle.hasSinks expects a State or Computed');
+}
+
+/**
+ * Run `fn` outside any reactive observer — reads inside don't track.
+ * @template T
+ * @param {() => T} fn
+ * @returns {T}
+ */
+function untrack(fn) {
+  const prev = currentObserver;
+  currentObserver = null;
+  try { return fn(); }
+  finally { currentObserver = prev; }
+}
+
+/**
+ * The Computed currently being evaluated, or null if no tracking is active.
+ * @returns {Computed<unknown> | null}
+ */
+function currentComputed() {
+  return /** @type {Computed<unknown> | null} */ (
+    currentObserver instanceof Computed ? currentObserver : null
+  );
+}
+
+export const Signal = {
+  State,
+  Computed,
+  subtle: {
+    Watcher,
+    untrack,
+    currentComputed,
+    introspectSources,
+    introspectSinks,
+    hasSinks,
+  },
+};
