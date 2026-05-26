@@ -42,6 +42,10 @@ export async function setupDOM() {
       g[key] = /** @type {any} */ (window)[key];
     }
   }
+  // Mark this realm as SSR so lazyComponent skips its dynamic import
+  // (the remote loads on the client during hydration; the server just
+  // emits the placeholder element).
+  /** @type {any} */ (globalThis).__mohsal_ssr__ = true;
   return window;
 }
 

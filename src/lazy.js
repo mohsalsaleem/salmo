@@ -146,6 +146,11 @@ export function lazyComponent({
         }
       }
 
+      // SSR: don't kick off the import. The client will load the
+      // remote on hydration; the server emits the placeholder element
+      // with whatever attributes it has, and the client takes over.
+      if (/** @type {any} */ (globalThis).__mohsal_ssr__) return;
+
       let importP = inFlight.get(src);
       if (!importP) {
         importP = verifiedImport(src, { integrity, allowedOrigins });
