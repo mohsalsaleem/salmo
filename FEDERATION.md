@@ -83,9 +83,16 @@ Federation gives the remote your origin's privileges. We close the **supply-chai
 
 ## What's missing (honest gaps)
 
-1. **Hot reload across the federation boundary.** A change in a remote requires a manual retry today; no automatic detection.
-2. **Versioning negotiation.** The manifest has a `framework.minVersion` field but `loadFromManifest` doesn't enforce it yet; it's documentary.
-3. **DevTools story.** "Which bundle does this `<x-foo>` come from?" — currently invisible unless the user looks at network. A small element-inspector overlay would help.
-4. **Streaming SSR across remotes.** Server-render the shell + inline remote outputs, stream chunks as they arrive. We have happy-dom SSR but not the streaming-stitching layer.
+### Closed
 
-Each is a follow-up; none is fundamental.
+1. **Version enforcement.** `loadFromManifest` now compares the manifest's `framework.minVersion` against the running framework version and reacts per `onVersionMismatch: 'warn' | 'throw' | 'silent'` (default `warn`). Production code can opt the check into `throw` so a misconfigured federation fails loudly at boot.
+
+2. **DevTools overlay.** Drop `<framework-devtools>` on any page (loaded from `/framework/src/devtools.js`); it auto-discovers every component registered via `lazyComponent` / `loadFromManifest`, lists each with its remote source and live-instance count, and highlights instances on the page on click. Renders in shadow DOM so it doesn't fight the host page's styles.
+
+3. **Hot reload primitive.** `reloadRemote(src)` clears the in-flight import cache and calls `.retry()` on every connected placeholder for that src — useful when the original load failed (network blip, integrity mismatch, timeout) and the remote has since become healthy.
+
+   **What it cannot do:** swap a working component's class definition. The browser's Custom Elements registry is write-once per tag — once `customElements.define('acme-foo', ...)` succeeds, that class is `acme-foo` forever, regardless of how many times you re-import. True HMR works around this by registering each iteration under a fresh tag and updating the placeholders to use the new tag, which is a real but larger project; we explicitly defer it. For everyday "the remote is back online" recovery, `reloadRemote` is enough.
+
+### Still open
+
+4. **Streaming SSR across remotes.** Server-render the shell + inline remote outputs, stream chunks as they arrive. We have happy-dom SSR for components and `lazyComponent` for client-side composition, but no server-side stitching layer that fetches remote-rendered HTML and weaves it into the response stream. This needs a server framework we don't currently have — it isn't a small follow-up so much as a separate project.

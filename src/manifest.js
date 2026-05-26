@@ -25,6 +25,7 @@
 // returned `results` array — they do not take the whole manifest down.
 
 import { lazyComponent } from './lazy.js';
+import { VERSION, gte } from './version.js';
 
 /**
  * @typedef {Object} ManifestComponent
@@ -64,6 +65,9 @@ import { lazyComponent } from './lazy.js';
  *   Return false to skip a component (e.g. version checks, opt-outs).
  * @property {number} [timeout]
  *   Forwarded to every lazyComponent call.
+ * @property {'warn' | 'throw' | 'silent'} [onVersionMismatch]
+ *   What to do if manifest.framework.minVersion is newer than ours.
+ *   Default 'warn'.
  */
 
 /**
@@ -79,6 +83,21 @@ export async function loadFromManifest(manifestUrl, options = {}) {
   /** @type {Manifest} */
   const manifest = await res.json();
   validateManifest(manifest, manifestUrl);
+
+  // Version check — only meaningful if the manifest declares a
+  // framework.minVersion AND it's higher than ours. Policy:
+  //   throw  → fail loud at boot (recommended for production)
+  //   warn   → log + continue (default; matches "best effort")
+  //   silent → no-op
+  const min = manifest.framework?.minVersion;
+  if (min && !gte(VERSION, min)) {
+    const msg =
+      `mohsal-framework v${VERSION} is older than the minimum required by ` +
+      `${manifest.name}@${manifest.version} (needs >= ${min}).`;
+    const policy = options.onVersionMismatch ?? 'warn';
+    if (policy === 'throw') throw new Error(msg);
+    if (policy === 'warn') console.warn(msg);
+  }
 
   const base = new URL(manifestUrl, /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/');
 

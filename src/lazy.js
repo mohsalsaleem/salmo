@@ -41,6 +41,44 @@ const DEFAULT_TIMEOUT_MS = 30_000;
  *  do not trigger N parallel imports. @type {Map<string, Promise<unknown>>} */
 const inFlight = new Map();
 
+/** Tag → registration record, for devtools / reloadRemote.
+ *  @type {Map<string, { src: string; realTag: string; registeredAt: number }>} */
+const registry = new Map();
+
+/** src → set of LIVE LazyElement instances. Used by reloadRemote so we
+ *  can iterate every connected placeholder and call .retry().
+ *  @type {Map<string, Set<HTMLElement & { retry: () => void }>>} */
+const liveInstances = new Map();
+
+/** Read-only view of the lazyComponent registry. The devtools overlay
+ *  uses this to map a Custom Element tag back to its remote source. */
+export function _getRegistry() { return registry; }
+
+/**
+ * Reload every connected instance of `src` (.retry() each one). Useful
+ * for "the remote came back online, refresh my placeholders." Returns
+ * the count of instances that were retried.
+ *
+ * Limitation: the browser's Custom Elements registry is write-once per
+ * tag. We can re-import the module (and inFlight is cleared so the
+ * import is fresh), but the remote's `customElements.define(tag, ...)`
+ * call won't re-run — the existing class definition stays. So this
+ * helps when the original load *failed* (network, integrity, timeout)
+ * but the remote's source has since been corrected. For true HMR where
+ * a working component's code changes, the browser provides no path
+ * that doesn't also discard live state — see FEDERATION.md.
+ *
+ * @param {string} src
+ * @returns {number}
+ */
+export function reloadRemote(src) {
+  inFlight.delete(src);
+  const insts = liveInstances.get(src);
+  if (!insts) return 0;
+  for (const inst of insts) inst.retry();
+  return insts.size;
+}
+
 /** @param {LazyErrorDetail} d */
 const defaultOnError = (d) => html`
   <div role="alert" style="
@@ -81,6 +119,9 @@ export function lazyComponent({
 
   class LazyElement extends HTMLElement {
     connectedCallback() {
+      let set = liveInstances.get(src);
+      if (!set) { set = new Set(); liveInstances.set(src, set); }
+      set.add(/** @type {any} */ (this));
       this.#mount();
     }
 
@@ -164,10 +205,12 @@ export function lazyComponent({
     }
 
     disconnectedCallback() {
+      liveInstances.get(src)?.delete(/** @type {any} */ (this));
       while (this.firstChild) this.removeChild(this.firstChild);
     }
   }
   customElements.define(tag, LazyElement);
+  registry.set(tag, { src, realTag, registeredAt: Date.now() });
   return LazyElement;
 }
 

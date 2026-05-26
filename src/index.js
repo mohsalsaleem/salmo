@@ -58,5 +58,6 @@ export { Signal } from './signal.js';
 export { effect } from './effect.js';
 export { withScope, getCurrentScope } from './scope.js';
 export { defineComponent } from './component.js';
-export { lazyComponent } from './lazy.js';
+export { lazyComponent, reloadRemote } from './lazy.js';
 export { loadFromManifest } from './manifest.js';
+export { VERSION } from './version.js';
