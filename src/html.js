@@ -17,6 +17,7 @@ import { Signal } from './signal.js';
 import { effect } from './effect.js';
 import { getCurrentScope } from './scope.js';
 import { unwrapTrust } from './unsafe.js';
+import { trustHTML } from './trusted-types.js';
 
 // Sinks where writing an attacker-controlled string is an XSS:
 //   .innerHTML / .outerHTML / .srcdoc — refuse without unsafe(...)
@@ -89,7 +90,9 @@ export function html(strings, ...values) {
     ''
   );
   const tpl = /** @type {HTMLTemplateElement} */ (document.createElement('template'));
-  tpl.innerHTML = src;
+  // Wrap through the Trusted Types policy so this works on TT-enforced
+  // pages too. In environments without TT, trustHTML is identity.
+  tpl.innerHTML = /** @type {any} */ (trustHTML(src));
   // <template>.content lives in a separate inert document where Custom
   // Elements stay in "pending" state — `customElements.upgrade()`
   // doesn't reach across document boundaries. importNode clones into
@@ -167,7 +170,10 @@ function bindAttributes(frag, values, deferred, caseMap) {
               `Wrap in unsafe(...) if you know the string is safe.`
             );
           }
-          /** @type {any} */ (el)[propName] = v;
+          // For HTML-string sinks, route through the Trusted Types
+          // policy so this survives a TT-enforced page. No-op when TT
+          // isn't active.
+          /** @type {any} */ (el)[propName] = guarded ? trustHTML(String(v)) : v;
         }));
         continue;
       }

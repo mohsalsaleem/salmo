@@ -35,3 +35,4 @@ export { repeat } from './repeat.js';
 export { when } from './when.js';
 export { lazyComponent } from './lazy.js';
 export { unsafe } from './unsafe.js';
+export { getPolicy, trustHTML } from './trusted-types.js';
