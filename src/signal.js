@@ -16,6 +16,7 @@ const DIRTY = 2;
  * @typedef {Object} Subscriber
  * @property {(mark: 1 | 2) => void} _notify
  * @property {(source: Source, version: number) => void} [_trackDep]
+ * @property {() => boolean} [_isLive]
  */
 
 /**
@@ -25,6 +26,9 @@ const DIRTY = 2;
  * @property {() => number} _version
  * @property {() => void} _validate
  * @property {() => boolean} [_isPending]
+ * @property {() => boolean} [_isLive]
+ * @property {() => void} [_incrementLive]
+ * @property {() => void} [_decrementLive]
  */
 
 /** @type {Subscriber | null} */
@@ -35,11 +39,18 @@ let currentObserver = null;
 // the user has to schedule a microtask if they want to act on the change.
 let inNotify = false;
 
+/** @param {string} op */
 function assertNotInNotify(op) {
   if (inNotify) {
     throw new Error(`Cannot ${op} a signal inside a Watcher's notify callback`);
   }
 }
+
+// Lifecycle hook symbols. Users pass functions under these keys in a
+// signal's options bag to be notified when the signal goes live (has
+// at least one transitive Watcher) or stops being live.
+const watchedSymbol = Symbol('Signal.subtle.watched');
+const unwatchedSymbol = Symbol('Signal.subtle.unwatched');
 
 /**
  * @template T
@@ -58,14 +69,29 @@ class State {
   /** @type {(a: T, b: T) => boolean} */
   #equals;
   #version = 0;
+  #liveCount = 0;
+  /** @type {((this: State<T>) => void) | undefined} */ #onWatched;
+  /** @type {((this: State<T>) => void) | undefined} */ #onUnwatched;
 
   /**
    * @param {T} value
-   * @param {EqualsOptions<T>} [options]
+   * @param {EqualsOptions<T> & {[k: symbol]: ((this: State<T>) => void) | undefined}} [options]
    */
   constructor(value, options = {}) {
     this.#value = value;
     this.#equals = options.equals ?? Object.is;
+    this.#onWatched = /** @type {any} */ (options[watchedSymbol]);
+    this.#onUnwatched = /** @type {any} */ (options[unwatchedSymbol]);
+  }
+
+  // Liveness ---------------------------------------------------------
+  _incrementLive() {
+    this.#liveCount++;
+    if (this.#liveCount === 1) this.#onWatched?.call(this);
+  }
+  _decrementLive() {
+    this.#liveCount--;
+    if (this.#liveCount === 0) this.#onUnwatched?.call(this);
   }
 
   /** @returns {T} */
@@ -91,8 +117,9 @@ class State {
   /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
   /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
   _subsArray() { return [...this.#subs]; }
-  _hasSubs() { return this.#subs.size > 0; }
+  _hasSubs() { return this.#liveCount > 0; }
   _version() { return this.#version; }
+  _isLive() { return this.#liveCount > 0; }
   /** States are always valid — nothing to validate. */
   _validate() {}
 }
@@ -115,14 +142,36 @@ class Computed {
   #deps = new Map();
   /** @type {Set<Subscriber>} */
   #subs = new Set();
+  #liveCount = 0;
+  /** @type {((this: Computed<T>) => void) | undefined} */ #onWatched;
+  /** @type {((this: Computed<T>) => void) | undefined} */ #onUnwatched;
 
   /**
    * @param {() => T} fn
-   * @param {EqualsOptions<T>} [options]
+   * @param {EqualsOptions<T> & {[k: symbol]: ((this: Computed<T>) => void) | undefined}} [options]
    */
   constructor(fn, options = {}) {
     this.#fn = fn;
     this.#equals = options.equals ?? Object.is;
+    this.#onWatched = /** @type {any} */ (options[watchedSymbol]);
+    this.#onUnwatched = /** @type {any} */ (options[unwatchedSymbol]);
+  }
+
+  // Liveness ---------------------------------------------------------
+  _incrementLive() {
+    this.#liveCount++;
+    if (this.#liveCount === 1) {
+      this.#onWatched?.call(this);
+      // Propagate to deps so they go live too.
+      for (const dep of this.#deps.keys()) dep._incrementLive?.();
+    }
+  }
+  _decrementLive() {
+    this.#liveCount--;
+    if (this.#liveCount === 0) {
+      this.#onUnwatched?.call(this);
+      for (const dep of this.#deps.keys()) dep._decrementLive?.();
+    }
   }
 
   /** @returns {T} */
@@ -158,9 +207,11 @@ class Computed {
   }
 
   #recompute() {
-    // Tear down old subscriptions; the run rebuilds them.
-    for (const dep of this.#deps.keys()) dep._removeSub(this);
-    this.#deps.clear();
+    // Snapshot old deps; rebuild from scratch so we can compute the
+    // delta below — only really-removed deps should be torn down (and
+    // only really-added ones should propagate liveness).
+    const oldDeps = this.#deps;
+    this.#deps = new Map();
 
     const prev = currentObserver;
     currentObserver = this;
@@ -176,6 +227,20 @@ class Computed {
         || !this.#equals.call(this, /** @type {T} */ (this.#value), next);
     } finally {
       currentObserver = prev;
+    }
+
+    // Deps that disappeared: unsubscribe + propagate unwatched if live.
+    for (const dep of oldDeps.keys()) {
+      if (!this.#deps.has(dep)) {
+        dep._removeSub(this);
+        if (this.#liveCount > 0) dep._decrementLive?.();
+      }
+    }
+    // Deps that newly appeared: propagate watched if live.
+    if (this.#liveCount > 0) {
+      for (const dep of this.#deps.keys()) {
+        if (!oldDeps.has(dep)) dep._incrementLive?.();
+      }
     }
 
     if (changed) {
@@ -210,10 +275,11 @@ class Computed {
   /** @param {Subscriber} sub */ _addSub(sub) { this.#subs.add(sub); }
   /** @param {Subscriber} sub */ _removeSub(sub) { this.#subs.delete(sub); }
   _subsArray() { return [...this.#subs]; }
-  _hasSubs() { return this.#subs.size > 0; }
+  _hasSubs() { return this.#liveCount > 0; }
   _version() { return this.#version; }
   _validate() { this.#validate(); }
   _isPending() { return this.#state !== CLEAN; }
+  _isLive() { return this.#liveCount > 0; }
   _depsArray() { return [...this.#deps.keys()]; }
 }
 
@@ -234,16 +300,20 @@ class Watcher {
       return;
     }
     for (const s of signals) {
+      if (this.#watching.has(s)) continue;
       this.#watching.add(s);
       s._addSub(this);
+      s._incrementLive?.();
     }
   }
 
   /** @param {...Source} signals */
   unwatch(...signals) {
     for (const s of signals) {
+      if (!this.#watching.has(s)) continue;
       this.#watching.delete(s);
       s._removeSub(this);
+      s._decrementLive?.();
     }
   }
 
@@ -287,7 +357,11 @@ function introspectSources(x) {
  * @returns {unknown[]}
  */
 function introspectSinks(x) {
-  if (x instanceof State || x instanceof Computed) return x._subsArray();
+  if (x instanceof State || x instanceof Computed) {
+    // Only sinks in a live observation chain count — non-live subs are
+    // dangling tracking edges with no consumer that would re-run.
+    return x._subsArray().filter((s) => s instanceof Watcher || s._isLive?.());
+  }
   throw new TypeError('Signal.subtle.introspectSinks expects a State or Computed');
 }
 
@@ -336,5 +410,7 @@ export const Signal = {
     introspectSources,
     introspectSinks,
     hasSinks,
+    watched: watchedSymbol,
+    unwatched: unwatchedSymbol,
   },
 };

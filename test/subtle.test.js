@@ -35,20 +35,33 @@ describe('Signal.subtle.currentComputed', () => {
 });
 
 describe('Signal.subtle introspection', () => {
-  it('hasSinks reflects whether anything observes a signal', () => {
+  it('hasSinks tracks live observation, not dangling tracking edges', () => {
     const s = new Signal.State(0);
     expect(Signal.subtle.hasSinks(s)).toBe(false);
     const c = new Signal.Computed(() => s.get());
     c.get();
+    // c is not watched → not live → s has no live sinks
+    expect(Signal.subtle.hasSinks(s)).toBe(false);
+
+    const w = new Signal.subtle.Watcher(() => {});
+    w.watch(c);
+    c.get(); // re-runs deps tracking under live observation
     expect(Signal.subtle.hasSinks(s)).toBe(true);
+
+    w.unwatch(c);
+    expect(Signal.subtle.hasSinks(s)).toBe(false);
   });
 
-  it('introspectSinks returns downstream subscribers', () => {
+  it('introspectSinks returns only live downstream subscribers', () => {
     const s = new Signal.State(0);
     const c = new Signal.Computed(() => s.get());
     c.get();
+    expect(Signal.subtle.introspectSinks(s)).toStrictEqual([]);
+
+    const w = new Signal.subtle.Watcher(() => {});
+    w.watch(c);
+    c.get();
     expect(Signal.subtle.introspectSinks(s)).toContain(c);
-    expect(Signal.subtle.introspectSinks(c)).toStrictEqual([]);
   });
 
   it('introspectSources returns deps of a Computed and sources of a Watcher', () => {
