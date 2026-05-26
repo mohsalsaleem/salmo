@@ -46,6 +46,27 @@ describe('effect', () => {
     expect(runs).toBe(1);
   });
 
+  it('disposes when an AbortSignal aborts (platform-native cleanup)', async () => {
+    const a = new Signal.State(0);
+    const ctrl = new AbortController();
+    let runs = 0;
+    effect(() => { a.get(); runs++; }, { signal: ctrl.signal });
+    expect(runs).toBe(1);
+
+    ctrl.abort();
+    a.set(1);
+    await tick();
+    expect(runs).toBe(1);
+  });
+
+  it('is a no-op if signal is already aborted at call time', () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    let runs = 0;
+    effect(() => { runs++; }, { signal: ctrl.signal });
+    expect(runs).toBe(0);
+  });
+
   it('tracks newly-read deps after a re-run', async () => {
     const flag = new Signal.State(true);
     const a = new Signal.State('a');
