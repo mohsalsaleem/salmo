@@ -17,18 +17,30 @@ A small, browser-native UI framework with **first-class module federation**, **T
 - **`<framework-devtools>`** — drop-in overlay that lists every federated component, its remote source, and live instances
 - **Re-exports of lit-html primitives** — `html`, `render`, `repeat`, `when`, `classMap`, `styleMap`, `ref`, `unsafeHTML`, `nothing`
 
+## Install
+
+Salmo is zero-build, zero-dependency. Load it from JSDelivr pinned to a release tag:
+
+```html
+<script type="module">
+  import { defineComponent, html, Signal } from 'https://cdn.jsdelivr.net/gh/mohsalsaleem/salmo@v0.1.0/src/index.js';
+</script>
+```
+
+The `@v0.1.0` tag pins to an immutable release. Bump to a newer tag to upgrade.
+
 ## Quickstart
 
 ```html
 <!DOCTYPE html>
 <html>
 <head>
-  <script type="module" src="/framework/src/index.js"></script>
+  <script type="module" src="/src/index.js"></script>
 </head>
 <body>
   <x-counter></x-counter>
   <script type="module">
-    import { defineComponent, html, Signal } from '/framework/src/index.js';
+    import { defineComponent, html, Signal } from '/src/index.js';
 
     defineComponent({
       tag: 'x-counter',
