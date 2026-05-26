@@ -16,21 +16,17 @@ polyfill, NOT regressions in our own test suite.
 
 ## Current baseline
 
-10 / 39 tests passing across the loadable suites (3 suites — `graph`,
-`ported/preact`, `ported/vue` — don't load yet because they reference
-APIs we have not implemented at all).
+**70 / 70** — full conformance with the proposal-signals polyfill's
+own test suite (including the ported Solid graph, Preact, and Vue
+suites). The journey:
 
-Missing surface, by category:
+| Commit | Tests | Δ |
+|---|---|---|
+| Wire-up | 10 / 39 | baseline |
+| Introspection + `untrack` + `currentComputed` | 43 / 70 | +33 |
+| 3-state validation + custom equality | 58 / 70 | +15 |
+| `isState`/`isComputed` + prohibited-context + equals leak fix | 62 / 70 | +4 |
+| Liveness + `watched`/`unwatched` lifecycle | 67 / 70 | +5 |
+| Cached errors in Computed | 70 / 70 | +3 |
 
-- `Signal.subtle.untrack`, `Signal.subtle.currentComputed`
-- `Signal.subtle.introspectSources`, `introspectSinks`, `hasSinks`
-- `Signal.subtle.watched` / `Signal.subtle.unwatched` lifecycle symbols
-- Custom equality (`equals` option on State / Computed)
-- Cached errors in Computed (computed throws should re-throw the same
-  error until deps change)
-- Watcher `this` binding (notify called with the watcher as `this` when
-  given a non-arrow function)
-- Prohibited reads/writes inside watcher notify
-
-Filling these in is the path to higher conformance — each one is a
-small, locally testable change.
+Re-run with `npm run test:conformance` whenever `src/signal.js` changes.

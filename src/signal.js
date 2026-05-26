@@ -132,6 +132,9 @@ class Computed {
   #fn;
   /** @type {T | undefined} */
   #value;
+  /** @type {unknown} */
+  #error;
+  #hasError = false;
   /** @type {(a: T, b: T) => boolean} */
   #equals;
   #version = 0;
@@ -182,6 +185,7 @@ class Computed {
       this.#subs.add(currentObserver);
       currentObserver._trackDep?.(this, this.#version);
     }
+    if (this.#hasError) throw this.#error;
     return /** @type {T} */ (this.#value);
   }
 
@@ -215,16 +219,39 @@ class Computed {
 
     const prev = currentObserver;
     currentObserver = this;
-    /** @type {T} */
-    let next;
-    let changed;
+    // outcome: 'value' = new value, 'unchanged' = equals said no diff,
+    // 'error' = either fn() or equals() threw.
+    /** @type {'value' | 'unchanged' | 'error'} */
+    let outcome = 'value';
+    /** @type {T | undefined} */
+    let nextValue;
+    /** @type {unknown} */
+    let nextError;
+
     try {
-      next = this.#fn();
+      try {
+        nextValue = this.#fn();
+      } catch (e) {
+        outcome = 'error';
+        nextError = e;
+      }
       // equals runs INSIDE the tracking context so anything it reads
       // becomes a dep of this computed (not of whoever was on the
       // stack before us — that would leak tracking info upward).
-      changed = !this.#everComputed
-        || !this.#equals.call(this, /** @type {T} */ (this.#value), next);
+      if (outcome === 'value' && this.#everComputed && !this.#hasError) {
+        try {
+          if (this.#equals.call(
+            this,
+            /** @type {T} */ (this.#value),
+            /** @type {T} */ (nextValue),
+          )) {
+            outcome = 'unchanged';
+          }
+        } catch (e) {
+          outcome = 'error';
+          nextError = e;
+        }
+      }
     } finally {
       currentObserver = prev;
     }
@@ -243,8 +270,19 @@ class Computed {
       }
     }
 
-    if (changed) {
-      this.#value = next;
+    if (outcome === 'value') {
+      this.#value = nextValue;
+      this.#hasError = false;
+      this.#error = undefined;
+      this.#version++;
+    } else if (outcome === 'error') {
+      this.#error = nextError;
+      this.#hasError = true;
+      this.#version++;
+    } else if (this.#hasError) {
+      // 'unchanged' but we were caching an error → clear it, bump version.
+      this.#hasError = false;
+      this.#error = undefined;
       this.#version++;
     }
     this.#everComputed = true;
