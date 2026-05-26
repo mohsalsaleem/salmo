@@ -150,9 +150,24 @@ function bindTextHoles(frag, values, deferred) {
         let curr = [];
         deferred.push(() => effect(() => {
           const next = toNodes(read());
-          const p = /** @type {ParentNode} */ (anchor.parentNode);
-          for (const n of curr) p.removeChild(n);
-          for (const n of next) p.insertBefore(n, anchor);
+          const p = /** @type {Node & { insertBefore: Function; removeChild: Function; }} */ (anchor.parentNode);
+          const nextSet = new Set(next);
+          // Walk `next` back-to-front and only insert when a node is
+          // actually out of place — same-position insertBefore calls
+          // can blur a focused descendant in some DOM impls (happy-dom)
+          // and are pointless work in real ones.
+          /** @type {Node} */
+          let cursor = anchor;
+          for (let i = next.length - 1; i >= 0; i--) {
+            const n = next[i];
+            if (n.nextSibling !== cursor || n.parentNode !== p) {
+              p.insertBefore(n, cursor);
+            }
+            cursor = n;
+          }
+          for (const n of curr) {
+            if (!nextSet.has(n) && n.parentNode === p) p.removeChild(n);
+          }
           curr = next;
         }));
       } else {
