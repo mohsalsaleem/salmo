@@ -8,6 +8,19 @@
 import { Signal } from './signal.js';
 import { getCurrentScope } from './scope.js';
 
+/**
+ * @typedef {Object} EffectOptions
+ * @property {AbortSignal} [signal]
+ */
+
+/**
+ * Run `fn` once now, then re-run whenever any signal it reads changes.
+ * Returns a dispose function. Pass `{signal}` to also dispose on abort.
+ *
+ * @param {() => void} fn
+ * @param {EffectOptions} [options]
+ * @returns {() => void}
+ */
 export function effect(fn, { signal } = {}) {
   signal ??= getCurrentScope()?.signal;
   if (signal?.aborted) return () => {};
@@ -22,7 +35,9 @@ export function effect(fn, { signal } = {}) {
     queueMicrotask(() => {
       scheduled = false;
       if (disposed) return;
-      for (const pending of w.getPending()) pending.get();
+      for (const pending of w.getPending()) {
+        /** @type {{ get(): unknown }} */ (/** @type {unknown} */ (pending)).get();
+      }
       w.watch();             // re-arm
     });
   });

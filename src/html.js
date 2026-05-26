@@ -17,20 +17,40 @@ import { Signal } from './signal.js';
 import { effect } from './effect.js';
 import { getCurrentScope } from './scope.js';
 
+/** @typedef {import('./signal.js').Signal extends infer S ? unknown : unknown} _signalImport */
+
+/**
+ * @typedef {unknown} Hole
+ *   A value interpolated into an html template. Functions and Signal
+ *   instances become reactive; other values render as static content.
+ */
+
+/**
+ * @typedef {(...args: unknown[]) => void} Deferred
+ */
+
 // Marker is a plain-ASCII token so the HTML parser treats it as ordinary
 // text/attribute content (avoids parser quirks around control chars).
 const MARK_PREFIX = '__mohsal_mark_';
 const MARK_RE = /__mohsal_mark_(\d+)__/g;
 const MARK_INCLUDES = MARK_PREFIX;
 
+/**
+ * Tagged template that produces a reactive DocumentFragment.
+ *
+ * @param {TemplateStringsArray} strings
+ * @param {...unknown} values
+ * @returns {DocumentFragment}
+ */
 export function html(strings, ...values) {
   const src = strings.reduce(
     (s, str, i) => s + str + (i < values.length ? `${MARK_PREFIX}${i}__` : ''),
     ''
   );
-  const tpl = document.createElement('template');
+  const tpl = /** @type {HTMLTemplateElement} */ (document.createElement('template'));
   tpl.innerHTML = src;
   const frag = tpl.content;
+  /** @type {Array<() => void>} */
   const deferred = [];
 
   bindAttributes(frag, values, deferred);
@@ -42,6 +62,11 @@ export function html(strings, ...values) {
   return frag;
 }
 
+/**
+ * @param {DocumentFragment} frag
+ * @param {unknown[]} values
+ * @param {Array<() => void>} deferred
+ */
 function bindAttributes(frag, values, deferred) {
   for (const el of frag.querySelectorAll('*')) {
     for (const attr of [...el.attributes]) {
@@ -50,7 +75,7 @@ function bindAttributes(frag, values, deferred) {
       const isWhole = matches.length === 1 && matches[0][0] === attr.value;
 
       if (attr.name.startsWith('on') && isWhole) {
-        const handler = values[+matches[0][1]];
+        const handler = /** @type {EventListener} */ (values[+matches[0][1]]);
         const eventName = attr.name.slice(2);
         el.removeAttribute(attr.name);
         el.addEventListener(eventName, handler);
@@ -69,24 +94,31 @@ function bindAttributes(frag, values, deferred) {
       const tmpl = attr.value;
       const name = attr.name;
       deferred.push(() => effect(() => {
-        el.setAttribute(name, tmpl.replace(MARK_RE, (_, i) => readValue(values[+i])));
+        el.setAttribute(name, tmpl.replace(MARK_RE, (_, i) => String(readValue(values[+i]))));
       }));
     }
   }
 }
 
+/**
+ * @param {DocumentFragment} frag
+ * @param {unknown[]} values
+ * @param {Array<() => void>} deferred
+ */
 function bindTextHoles(frag, values, deferred) {
   // happy-dom's TreeWalker doesn't honor SHOW_TEXT; walk everything
   // and filter ourselves. SHOW_ALL works correctly across implementations.
+  /** @type {Text[]} */
   const texts = [];
   const walker = document.createTreeWalker(frag, NodeFilter.SHOW_ALL);
   for (let n; (n = walker.nextNode()); ) {
-    if (n.nodeType === Node.TEXT_NODE && n.textContent.includes(MARK_INCLUDES)) {
-      texts.push(n);
+    if (n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').includes(MARK_INCLUDES)) {
+      texts.push(/** @type {Text} */ (n));
     }
   }
   for (const tn of texts) {
-    const parts = tn.textContent.split(MARK_RE);
+    const parts = (tn.textContent ?? '').split(MARK_RE);
+    /** @type {Node[]} */
     const out = [];
     for (let i = 0; i < parts.length; i++) {
       if (i % 2 === 0) {
@@ -97,11 +129,14 @@ function bindTextHoles(frag, values, deferred) {
       if (typeof v === 'function' || isSignal(v)) {
         const anchor = document.createComment('');
         out.push(anchor);
-        const read = typeof v === 'function' ? v : () => v.get();
+        const read = /** @type {() => unknown} */ (
+          typeof v === 'function' ? v : () => /** @type {{ get(): unknown }} */ (v).get()
+        );
+        /** @type {Node[]} */
         let curr = [];
         deferred.push(() => effect(() => {
           const next = toNodes(read());
-          const p = anchor.parentNode;
+          const p = /** @type {ParentNode} */ (anchor.parentNode);
           for (const n of curr) p.removeChild(n);
           for (const n of next) p.insertBefore(n, anchor);
           curr = next;
@@ -114,22 +149,35 @@ function bindTextHoles(frag, values, deferred) {
   }
 }
 
+/**
+ * @param {unknown} v
+ * @returns {unknown}
+ */
 function readValue(v) {
   if (typeof v === 'function') return v();
-  if (isSignal(v)) return v.get();
+  if (isSignal(v)) return /** @type {{ get(): unknown }} */ (v).get();
   return v;
 }
 
+/**
+ * @param {unknown} v
+ * @returns {boolean}
+ */
 function isSignal(v) {
   return v instanceof Signal.State || v instanceof Signal.Computed;
 }
 
+/**
+ * @param {unknown} v
+ * @returns {Node[]}
+ */
 function toNodes(v) {
   if (v == null || v === false) return [];
   // Duck-type by nodeType — instanceof Node/DocumentFragment is unreliable
   // across DOM impls (happy-dom uses different class identities).
-  if (v?.nodeType === 11) return [...v.childNodes]; // DocumentFragment
-  if (typeof v?.nodeType === 'number') return [v];
+  const n = /** @type {{ nodeType?: number; childNodes?: NodeListOf<Node> }} */ (v);
+  if (n.nodeType === 11) return [...(n.childNodes ?? [])]; // DocumentFragment
+  if (typeof n.nodeType === 'number') return [/** @type {Node} */ (v)];
   if (Array.isArray(v)) return v.flatMap(toNodes);
   return [document.createTextNode(String(v))];
 }

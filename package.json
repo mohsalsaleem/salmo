@@ -4,12 +4,23 @@
   "description": "A tiny signals-based frontend framework",
   "type": "module",
   "private": true,
+  "main": "src/index.js",
+  "types": "types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./types/index.d.ts",
+      "import": "./src/index.js"
+    }
+  },
   "scripts": {
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.types-test.json",
+    "types": "tsc"
   },
   "devDependencies": {
     "happy-dom": "^15.11.7",
+    "typescript": "^6.0.3",
     "vitest": "^2.1.8"
   }
 }
