@@ -34,11 +34,9 @@ const inFlight = new Map();
 export function lazyComponent({ tag, src, as, fallback }) {
   if (!as) throw new Error('lazyComponent: `as` (the real tag the remote registers) is required');
   if (as === tag) throw new Error('lazyComponent: `as` must differ from `tag` (the placeholder cannot reuse the real tag)');
+  const realTag = /** @type {string} */ (as);
 
   class LazyElement extends HTMLElement {
-    /** @type {Element | null} */
-    #real = null;
-
     connectedCallback() {
       // Render the fallback synchronously.
       if (fallback) {
@@ -55,7 +53,7 @@ export function lazyComponent({ tag, src, as, fallback }) {
       p.then(
         () => {
           if (!this.isConnected) return;
-          if (!customElements.get(as)) {
+          if (!customElements.get(realTag)) {
             this.dispatchEvent(new CustomEvent('lazy-error', {
               detail: { src, error: new Error(`module loaded but no element registered as <${as}>`) },
               bubbles: true,
@@ -63,7 +61,7 @@ export function lazyComponent({ tag, src, as, fallback }) {
             return;
           }
           this.replaceChildren();
-          const real = document.createElement(as);
+          const real = document.createElement(realTag);
           // Forward attributes so usage like <my-lazy data-foo="x"> reaches
           // the real element. Property bindings need to be set on the lazy
           // host directly (see examples/federation/) — that's a follow-up.
@@ -71,7 +69,6 @@ export function lazyComponent({ tag, src, as, fallback }) {
             real.setAttribute(attr.name, attr.value);
           }
           this.append(real);
-          this.#real = real;
         },
         (err) => {
           if (!this.isConnected) return;
@@ -83,7 +80,6 @@ export function lazyComponent({ tag, src, as, fallback }) {
     }
 
     disconnectedCallback() {
-      this.#real = null;
       while (this.firstChild) this.removeChild(this.firstChild);
     }
   }

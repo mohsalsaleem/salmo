@@ -34,3 +34,4 @@ export { defineComponent } from './component.js';
 export { repeat } from './repeat.js';
 export { when } from './when.js';
 export { lazyComponent } from './lazy.js';
+export { unsafe } from './unsafe.js';

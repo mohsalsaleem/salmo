@@ -16,6 +16,28 @@
 import { Signal } from './signal.js';
 import { effect } from './effect.js';
 import { getCurrentScope } from './scope.js';
+import { unwrapTrust } from './unsafe.js';
+
+// Sinks where writing an attacker-controlled string is an XSS:
+//   .innerHTML / .outerHTML / .srcdoc — refuse without unsafe(...)
+// Sinks where writing an attacker-controlled URL is an XSS:
+//   javascript: / vbscript: / data:text/html schemes in href, src, etc.
+const DANGEROUS_PROPS = new Set(['innerHTML', 'outerHTML', 'srcdoc']);
+const URL_ATTRS = new Set(['href', 'src', 'formaction', 'action', 'xlink:href', 'ping', 'poster']);
+const DANGEROUS_SCHEME = /^\s*(javascript|vbscript|data:text\/html)/i;
+
+/** @param {string} raw */
+function sanitizeUrl(raw) {
+  if (DANGEROUS_SCHEME.test(raw)) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `mohsal-framework: blocked dangerous URL scheme in attribute (${raw.slice(0, 40)}…). ` +
+      `Wrap in unsafe(...) to allow.`
+    );
+    return 'about:blank';
+  }
+  return raw;
+}
 
 /** @typedef {import('./signal.js').Signal extends infer S ? unknown : unknown} _signalImport */
 
@@ -43,6 +65,25 @@ const MARK_INCLUDES = MARK_PREFIX;
  * @returns {DocumentFragment}
  */
 export function html(strings, ...values) {
+  // The HTML parser lowercases attribute names, so `.innerHTML` arrives
+  // as `.innerhtml` and `el.innerhtml = v` would set an expando rather
+  // than the real DOM property. Scan the AUTHOR-WRITTEN strings (which
+  // the parser hasn't touched yet) and build a case-preservation map
+  // for `.prop` and `on*` attribute names.
+  /** @type {Map<string, string>} */
+  const caseMap = new Map();
+  for (const s of strings) {
+    for (const m of s.matchAll(/[.:]?([a-zA-Z][a-zA-Z0-9-]*)\s*=/g)) {
+      const name = m[1];
+      caseMap.set(name.toLowerCase(), name);
+    }
+    for (const m of s.matchAll(/\son([A-Z][a-zA-Z]*)\s*=/g)) {
+      // onSomeEvent= → preserve case for event name
+      const name = 'on' + m[1];
+      caseMap.set(name.toLowerCase(), name);
+    }
+  }
+
   const src = strings.reduce(
     (s, str, i) => s + str + (i < values.length ? `${MARK_PREFIX}${i}__` : ''),
     ''
@@ -61,7 +102,7 @@ export function html(strings, ...values) {
   /** @type {Array<() => void>} */
   const deferred = [];
 
-  bindAttributes(frag, values, deferred);
+  bindAttributes(frag, values, deferred, caseMap);
   bindTextHoles(frag, values, deferred);
 
   // Run effects only after the fragment is fully constructed so that
@@ -74,8 +115,11 @@ export function html(strings, ...values) {
  * @param {DocumentFragment} frag
  * @param {unknown[]} values
  * @param {Array<() => void>} deferred
+ * @param {Map<string, string>} caseMap
  */
-function bindAttributes(frag, values, deferred) {
+function bindAttributes(frag, values, deferred, caseMap) {
+  /** @param {string} lc */
+  const recase = (lc) => caseMap.get(lc) ?? lc;
   for (const el of frag.querySelectorAll('*')) {
     for (const attr of [...el.attributes]) {
       if (!attr.value.includes(MARK_INCLUDES)) continue;
@@ -84,7 +128,10 @@ function bindAttributes(frag, values, deferred) {
 
       if (attr.name.startsWith('on') && isWhole) {
         const handler = /** @type {EventListener} */ (values[+matches[0][1]]);
-        const eventName = attr.name.slice(2);
+        // Recase from the original template source: <x oncommitEdit=...>
+        // arrives lowercased, so look up the author's spelling and use
+        // that for addEventListener (events are case-sensitive).
+        const eventName = recase(attr.name.slice(2));
         el.removeAttribute(attr.name);
         el.addEventListener(eventName, handler);
         // Real browsers support addEventListener({signal}) for cleanup,
@@ -104,11 +151,23 @@ function bindAttributes(frag, values, deferred) {
       // `checked` toggling, `value` updating after first paint, anything
       // where the parser-time attribute and the live property diverge.
       if (attr.name.startsWith('.') && isWhole) {
-        const propName = attr.name.slice(1);
+        // Recase: <input .innerHTML=...> arrives as .innerhtml from the
+        // HTML parser; el.innerhtml = v would set an expando, not the
+        // real property. Look up the author's spelling.
+        const propName = recase(attr.name.slice(1));
         const idx = +matches[0][1];
+        const guarded = DANGEROUS_PROPS.has(propName);
         el.removeAttribute(attr.name);
         deferred.push(() => effect(() => {
-          /** @type {any} */ (el)[propName] = readValue(values[idx]);
+          const raw = readValue(values[idx]);
+          const { trusted, value: v } = unwrapTrust(raw);
+          if (guarded && !trusted) {
+            throw new Error(
+              `mohsal-framework: refusing to set .${propName} from a non-trusted value. ` +
+              `Wrap in unsafe(...) if you know the string is safe.`
+            );
+          }
+          /** @type {any} */ (el)[propName] = v;
         }));
         continue;
       }
@@ -175,8 +234,21 @@ function bindAttributes(frag, values, deferred) {
 
       const tmpl = attr.value;
       const name = attr.name;
+      const isUrl = URL_ATTRS.has(name.toLowerCase());
       deferred.push(() => effect(() => {
-        el.setAttribute(name, tmpl.replace(MARK_RE, (_, i) => String(readValue(values[+i]))));
+        // Walk the interpolations. Track whether the WHOLE attribute
+        // came from a single unsafe()-wrapped value; only then does the
+        // URL sanitizer step aside. Multi-part values stay sanitized
+        // because the safe parts of the template (e.g. "/users/") give
+        // false confidence that the whole result is safe.
+        let wholeTrusted = false;
+        const final = tmpl.replace(MARK_RE, (_, i) => {
+          const { trusted, value } = unwrapTrust(readValue(values[+i]));
+          if (isWhole && trusted) wholeTrusted = true;
+          return String(value);
+        });
+        const out = isUrl && !wholeTrusted ? sanitizeUrl(final) : final;
+        el.setAttribute(name, out);
       }));
     }
   }
