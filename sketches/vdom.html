@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>VDOM + hooks sketch · mohsal framework</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #ddd; background: #2a2d37; line-height: 1.5; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  p.lede { color: #aaa; margin-top: 0; }
+  button { padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; background: #00a1ff; color: #2a2d37; border: 0; border-radius: 0.3rem; font-weight: 700; }
+  input { padding: 0.5rem; font: inherit; width: 100%; box-sizing: border-box; background: #363946; color: #fff; border: 1px solid #555; border-radius: 0.3rem; }
+  .card { background: #363946; padding: 0.9rem 1rem; border-radius: 0.5rem; margin: 0.5rem 0; border: 1px solid rgba(255,255,255,0.06); }
+  .card h3 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+  .stack { color: #9fdcff; font-size: 0.85rem; margin: 0.2rem 0 0.4rem; }
+  .row { display: flex; align-items: center; gap: 1rem; margin: 1rem 0; }
+  .meta { color: #888; font-size: 0.85rem; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; background: #1d4d80; color: #cce8ff; border-radius: 0.3rem; font-size: 0.8rem; }
+  a { color: #00a1ff; }
+  nav { margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<nav><a href="./index.html">← back to comparison</a></nav>
+<h1>VDOM + hooks sketch</h1>
+<p class="lede">Components are functions that return a virtual-DOM tree. On state change the function re-runs; a diff figures out the minimal DOM patches. Like a tiny React.</p>
+<div id="app"></div>
+
+<script type="module">
+// ════════════════════════════════════════════════════════════════════════
+// THE FRAMEWORK (~110 lines)
+// ════════════════════════════════════════════════════════════════════════
+
+// --- vnodes -------------------------------------------------------------
+// Element: { type:'el', tag, props, children, dom }
+// Text:    { type:'text', value, dom }
+
+function createDom(vnode) {
+  if (vnode.type === 'text') return (vnode.dom = document.createTextNode(vnode.value));
+  const el = document.createElement(vnode.tag);
+  for (const [k, v] of Object.entries(vnode.props)) setProp(el, k, undefined, v);
+  for (const child of vnode.children) el.appendChild(createDom(child));
+  return (vnode.dom = el);
+}
+
+function setProp(el, name, oldVal, newVal) {
+  if (name.startsWith('on')) {
+    const evt = name.slice(2).toLowerCase();
+    if (oldVal) el.removeEventListener(evt, oldVal);
+    if (newVal) el.addEventListener(evt, newVal);
+  } else if (newVal == null || newVal === false) {
+    el.removeAttribute(name);
+  } else {
+    el.setAttribute(name, newVal === true ? '' : newVal);
+  }
+}
+
+// --- diff/patch ---------------------------------------------------------
+function patch(parent, oldV, newV, index) {
+  if (!oldV && newV) {
+    parent.appendChild(createDom(newV));
+  } else if (oldV && !newV) {
+    oldV.dom.remove();
+  } else if (oldV.type !== newV.type || (newV.type === 'el' && oldV.tag !== newV.tag)) {
+    const fresh = createDom(newV);
+    oldV.dom.replaceWith(fresh);
+  } else if (newV.type === 'text') {
+    newV.dom = oldV.dom;
+    if (oldV.value !== newV.value) newV.dom.textContent = newV.value;
+  } else {
+    newV.dom = oldV.dom;
+    const el = newV.dom;
+    // Diff props
+    const allKeys = new Set([...Object.keys(oldV.props), ...Object.keys(newV.props)]);
+    for (const k of allKeys) {
+      if (oldV.props[k] !== newV.props[k]) setProp(el, k, oldV.props[k], newV.props[k]);
+    }
+    // Diff children (positional — no keys)
+    const oc = oldV.children, nc = newV.children;
+    const max = Math.max(oc.length, nc.length);
+    for (let i = max - 1; i >= 0; i--) patch(el, oc[i], nc[i], i);
+  }
+}
+
+// --- hooks --------------------------------------------------------------
+let currentInstance = null;
+
+function useState(initial) {
+  const inst = currentInstance, idx = inst.hookIdx++;
+  if (!(idx in inst.hooks)) inst.hooks[idx] = initial;
+  return [
+    inst.hooks[idx],
+    (next) => {
+      inst.hooks[idx] = typeof next === 'function' ? next(inst.hooks[idx]) : next;
+      schedule(inst);
+    },
+  ];
+}
+
+let queued = new Set(), flushing = false;
+function schedule(inst) {
+  queued.add(inst);
+  if (flushing) return;
+  flushing = true;
+  queueMicrotask(() => {
+    flushing = false;
+    const batch = [...queued]; queued.clear();
+    batch.forEach(i => i.rerender());
+  });
+}
+
+function mount(component, container) {
+  const inst = {
+    hooks: [],
+    hookIdx: 0,
+    prevTree: null,
+    rerender() {
+      this.hookIdx = 0;
+      const prev = currentInstance;
+      currentInstance = this;
+      try {
+        const tree = component();
+        patch(container, this.prevTree, tree, 0);
+        this.prevTree = tree;
+      } finally { currentInstance = prev; }
+    },
+  };
+  inst.rerender();
+}
+
+// --- tagged template -> vnode tree --------------------------------------
+const MARK_RE = /\x01(\d+)\x01/g;
+const tplCache = new WeakMap();
+
+function html(strings, ...values) {
+  let tpl = tplCache.get(strings);
+  if (!tpl) {
+    tpl = document.createElement('template');
+    tpl.innerHTML = strings.reduce((s, str, i) => s + str + (i < values.length ? `\x01${i}\x01` : ''), '');
+    tplCache.set(strings, tpl);
+  }
+  return nodeToVnode(tpl.content.firstElementChild, values);
+}
+
+function nodeToVnode(node, values) {
+  const props = {};
+  for (const attr of node.attributes) {
+    const matches = [...attr.value.matchAll(MARK_RE)];
+    if (matches.length === 0) {
+      props[attr.name] = attr.value;
+    } else if (matches.length === 1 && matches[0][0] === attr.value) {
+      props[attr.name] = values[+matches[0][1]];
+    } else {
+      props[attr.name] = attr.value.replace(MARK_RE, (_, i) => values[+i]);
+    }
+  }
+  const children = [];
+  for (const child of node.childNodes) {
+    if (child.nodeType === Node.TEXT_NODE) {
+      const parts = child.textContent.split(MARK_RE);
+      for (let i = 0; i < parts.length; i++) {
+        if (i % 2 === 0) { if (parts[i]) children.push({ type: 'text', value: parts[i] }); }
+        else pushChild(children, values[+parts[i]]);
+      }
+    } else if (child.nodeType === Node.ELEMENT_NODE) {
+      children.push(nodeToVnode(child, values));
+    }
+  }
+  return { type: 'el', tag: node.tagName.toLowerCase(), props, children };
+}
+
+function pushChild(out, v) {
+  if (v == null || v === false) return;
+  if (Array.isArray(v)) { v.forEach(x => pushChild(out, x)); return; }
+  if (typeof v === 'object' && v.type) { out.push(v); return; }
+  out.push({ type: 'text', value: String(v) });
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// THE APP — uses the framework above
+// ════════════════════════════════════════════════════════════════════════
+
+const works = [
+  { name: 'mkqr.io',    url: 'https://mkqr.io',              stack: ['Rails', 'PostgreSQL'] },
+  { name: 'Kyte',       url: 'https://kyte.mohsal.dev/',     stack: ['Remix', 'TypeScript', 'SQLite', 'Qdrant', 'LLMs'] },
+  { name: 'Trav',       url: 'https://trav.mohsal.dev',      stack: ['Go', 'React', 'SQLite'] },
+  { name: 'Retro Board',url: 'https://retro.mohsal.dev',     stack: ['Rails', 'PostgreSQL'] },
+  { name: 'Wanderlog',  url: 'https://wander.mohsal.dev',    stack: ['React Router', 'TypeScript', 'SQLite', 'Prisma', 'Tailwind'] },
+];
+
+let componentRuns = 0;
+
+function App() {
+  componentRuns++;
+  const [count, setCount] = useState(0);
+  const [filter, setFilter] = useState('');
+
+  const q = filter.toLowerCase();
+  const matches = works.filter(w =>
+    w.name.toLowerCase().includes(q) || w.stack.join(' ').toLowerCase().includes(q)
+  );
+
+  return html`
+    <div>
+      <p class="meta">App() ran <span class="badge">${componentRuns}</span> time(s). Watch this number climb as you type.</p>
+
+      <div class="row">
+        <button onclick=${() => setCount(count + 1)}>Increment</button>
+        <span>Counter: <strong>${count}</strong></span>
+      </div>
+
+      <input placeholder="Filter by name or stack…" oninput=${e => setFilter(e.target.value)}>
+      <p class="meta">Showing ${matches.length} of ${works.length}</p>
+
+      <div>${matches.map(w => html`
+        <article class="card">
+          <h3>${w.name}</h3>
+          <div class="stack">${w.stack.join(' • ')}</div>
+          <a href=${w.url} target="_blank" rel="noopener">${w.url} →</a>
+        </article>
+      `)}</div>
+
+      <p class="meta" style="margin-top:1.5rem">
+        <strong>What to notice:</strong> App() re-runs in its entirety on every keystroke and every click.
+        The diff layer then walks the old and new vnode trees and only touches DOM where they differ —
+        you can confirm in DevTools that unchanged cards never repaint.
+      </p>
+    </div>
+  `;
+}
+
+mount(App, document.getElementById('app'));
+</script>
+</body>
+</html>

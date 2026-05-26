@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Framework sketches · mohsal.dev</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #ddd; background: #2a2d37; line-height: 1.55; }
+  h1 { font-size: 1.6rem; }
+  h2 { font-size: 1.15rem; margin-top: 0; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.5rem 0; }
+  .card { background: #363946; padding: 1rem 1.2rem; border-radius: 0.6rem; border: 1px solid rgba(255,255,255,0.06); }
+  .card a.cta { display: inline-block; margin-top: 0.5rem; padding: 0.4rem 0.8rem; background: #00a1ff; color: #2a2d37; border-radius: 0.3rem; font-weight: 700; text-decoration: none; }
+  .pros, .cons { font-size: 0.9rem; margin: 0.5rem 0; padding-left: 1.1rem; }
+  .pros li { color: #b4e3b4; }
+  .cons li { color: #e8b4b4; }
+  code { background: #1d212a; padding: 0.1rem 0.35rem; border-radius: 0.25rem; font-size: 0.9em; }
+  a { color: #00a1ff; }
+  @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Pick a reactivity model</h1>
+<p>Two ~100-line sketches of the same demo: a filterable list and a counter, built with tagged-template syntax. Read the code, click around, then tell me which feels right and we'll grow it into the real framework.</p>
+
+<div class="grid">
+  <div class="card">
+    <h2>Signals</h2>
+    <p>Like Solid / Vue 3. State is a <code>signal()</code>. Effects auto-subscribe to the signals they read. No virtual DOM — the framework binds reactive holes directly to DOM nodes.</p>
+    <ul class="pros">
+      <li>Smaller core (~50 lines)</li>
+      <li>Updates are surgically scoped — no diff pass</li>
+      <li>Closer to how the browser actually works</li>
+    </ul>
+    <ul class="cons">
+      <li>You have to call signals as functions: <code>count()</code> not <code>count</code></li>
+      <li>Memory cleanup of stale subscriptions is its own problem</li>
+    </ul>
+    <a class="cta" href="./signals.html">Open signals demo →</a>
+  </div>
+
+  <div class="card">
+    <h2>VDOM + hooks</h2>
+    <p>Like a tiny React. Components are functions that return a vnode tree. State via <code>useState</code>. A diff figures out the minimal DOM patches.</p>
+    <ul class="pros">
+      <li>Familiar mental model — component re-runs on state change</li>
+      <li>State is just a value: <code>count</code> not <code>count()</code></li>
+      <li>Diffing is interesting to write</li>
+    </ul>
+    <ul class="cons">
+      <li>~2x more code (~110 lines)</li>
+      <li>Every keystroke re-runs the entire component body</li>
+      <li>Hooks rely on call-order — same gotchas as React</li>
+    </ul>
+    <a class="cta" href="./vdom.html">Open VDOM demo →</a>
+  </div>
+</div>
+
+<h2 style="font-size:1.2rem">What to look for in each demo</h2>
+<ul>
+  <li>A counter at the top tracks how many times the <em>setup / component</em> runs.</li>
+  <li>In the signals demo it stays at <strong>1</strong> forever. In the VDOM demo it climbs on every keystroke.</li>
+  <li>Open DevTools → Elements and watch which nodes flash (highlight on update) — signals only flashes the changed text node; VDOM flashes anything the diff touches.</li>
+</ul>
+
+<p style="color:#888;font-size:0.9rem">Once you pick one, we'll:</p>
+<ol style="color:#888;font-size:0.9rem">
+  <li>Promote the sketch to a real <code>framework/</code> module (split into files, add proper effect cleanup, keyed list reconciliation, etc.)</li>
+  <li>Rewrite <code>index.html</code> to render through it, while keeping a server-rendered HTML fallback so the site degrades gracefully.</li>
+  <li>Layer on the Rails-y backend pieces later — file-based routing, conventions, a dev server.</li>
+</ol>
+</body>
+</html>

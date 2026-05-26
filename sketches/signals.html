@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Signals sketch · mohsal framework</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #ddd; background: #2a2d37; line-height: 1.5; }
+  h1 { font-size: 1.4rem; margin-bottom: 0.25rem; }
+  p.lede { color: #aaa; margin-top: 0; }
+  button { padding: 0.4rem 0.9rem; font: inherit; cursor: pointer; background: #00a1ff; color: #2a2d37; border: 0; border-radius: 0.3rem; font-weight: 700; }
+  input { padding: 0.5rem; font: inherit; width: 100%; box-sizing: border-box; background: #363946; color: #fff; border: 1px solid #555; border-radius: 0.3rem; }
+  .card { background: #363946; padding: 0.9rem 1rem; border-radius: 0.5rem; margin: 0.5rem 0; border: 1px solid rgba(255,255,255,0.06); }
+  .card h3 { margin: 0 0 0.3rem; font-size: 1.05rem; }
+  .stack { color: #9fdcff; font-size: 0.85rem; margin: 0.2rem 0 0.4rem; }
+  .row { display: flex; align-items: center; gap: 1rem; margin: 1rem 0; }
+  .meta { color: #888; font-size: 0.85rem; }
+  .badge { display: inline-block; padding: 0.1rem 0.5rem; background: #1d4d80; color: #cce8ff; border-radius: 0.3rem; font-size: 0.8rem; }
+  a { color: #00a1ff; }
+  nav { margin-bottom: 1rem; }
+</style>
+</head>
+<body>
+<nav><a href="./index.html">← back to comparison</a></nav>
+<h1>Signals sketch</h1>
+<p class="lede">Fine-grained reactivity. Effects subscribe to signals they read, and re-run only when those specific signals change. No virtual DOM, no diffing.</p>
+<div id="app"></div>
+
+<script type="module">
+// ════════════════════════════════════════════════════════════════════════
+// THE FRAMEWORK (~50 lines)
+// ════════════════════════════════════════════════════════════════════════
+
+// --- reactive primitives ------------------------------------------------
+let currentEffect = null;
+
+function signal(value) {
+  const subs = new Set();
+  const read = () => { if (currentEffect) subs.add(currentEffect); return value; };
+  read.set = (next) => {
+    if (next === value) return;
+    value = next;
+    [...subs].forEach(fn => fn());
+  };
+  return read;
+}
+
+function effect(fn) {
+  const run = () => {
+    const prev = currentEffect;
+    currentEffect = run;
+    try { fn(); } finally { currentEffect = prev; }
+  };
+  run();
+}
+
+// --- tagged template -> reactive DOM ------------------------------------
+const MARK_RE = /\x01(\d+)\x01/g;
+
+function html(strings, ...values) {
+  const src = strings.reduce((s, str, i) => s + str + (i < values.length ? `\x01${i}\x01` : ''), '');
+  const tpl = document.createElement('template');
+  tpl.innerHTML = src;
+  const frag = tpl.content;
+  const deferred = [];
+
+  // Process attributes
+  for (const el of frag.querySelectorAll('*')) {
+    for (const attr of [...el.attributes]) {
+      if (!attr.value.includes('\x01')) continue;
+      const matches = [...attr.value.matchAll(MARK_RE)];
+      const isFullValue = matches.length === 1 && matches[0][0] === attr.value;
+
+      if (attr.name.startsWith('on') && isFullValue) {
+        // Event handler: <button onclick=${fn}>
+        el.removeAttribute(attr.name);
+        el.addEventListener(attr.name.slice(2), values[+matches[0][1]]);
+      } else {
+        // Reactive attribute: <a href=${url}> or class="x ${y}"
+        const tmpl = attr.value, name = attr.name;
+        deferred.push(() => effect(() => {
+          el.setAttribute(name, tmpl.replace(MARK_RE, (_, i) => {
+            const v = values[+i];
+            return typeof v === 'function' ? v() : v;
+          }));
+        }));
+      }
+    }
+  }
+
+  // Process text nodes (interpolations)
+  const textNodes = [];
+  const walker = document.createTreeWalker(frag, NodeFilter.SHOW_TEXT);
+  for (let n; (n = walker.nextNode()); ) if (n.textContent.includes('\x01')) textNodes.push(n);
+
+  for (const tn of textNodes) {
+    const parts = tn.textContent.split(MARK_RE);
+    const out = [];
+    for (let i = 0; i < parts.length; i++) {
+      if (i % 2 === 0) {
+        if (parts[i]) out.push(document.createTextNode(parts[i]));
+      } else {
+        const v = values[+parts[i]];
+        if (typeof v === 'function') {
+          // Reactive hole: function gets re-invoked when its signal deps change
+          const anchor = document.createComment(`r${parts[i]}`);
+          out.push(anchor);
+          let curr = [];
+          deferred.push(() => effect(() => {
+            const next = toNodes(v());
+            const p = anchor.parentNode;
+            for (const n of curr) p.removeChild(n);
+            for (const n of next) p.insertBefore(n, anchor);
+            curr = next;
+          }));
+        } else {
+          out.push(...toNodes(v));
+        }
+      }
+    }
+    tn.replaceWith(...out);
+  }
+
+  // Run effects only AFTER the fragment is fully built (anchors have parents)
+  deferred.forEach(fn => fn());
+  return frag;
+}
+
+function toNodes(v) {
+  if (v == null || v === false) return [];
+  if (v instanceof Node) return [v];
+  if (v instanceof DocumentFragment) return [...v.childNodes];
+  if (Array.isArray(v)) return v.flatMap(toNodes);
+  return [document.createTextNode(String(v))];
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// THE APP — uses the framework above
+// ════════════════════════════════════════════════════════════════════════
+
+const works = [
+  { name: 'mkqr.io',    url: 'https://mkqr.io',              stack: ['Rails', 'PostgreSQL'] },
+  { name: 'Kyte',       url: 'https://kyte.mohsal.dev/',     stack: ['Remix', 'TypeScript', 'SQLite', 'Qdrant', 'LLMs'] },
+  { name: 'Trav',       url: 'https://trav.mohsal.dev',      stack: ['Go', 'React', 'SQLite'] },
+  { name: 'Retro Board',url: 'https://retro.mohsal.dev',     stack: ['Rails', 'PostgreSQL'] },
+  { name: 'Wanderlog',  url: 'https://wander.mohsal.dev',    stack: ['React Router', 'TypeScript', 'SQLite', 'Prisma', 'Tailwind'] },
+];
+
+// This counts how many times the *top-level setup* runs.
+// In signals, it runs ONCE — re-renders happen at the granularity of effects, not components.
+let setupRuns = 0;
+setupRuns++;
+
+const filter = signal('');
+const count = signal(0);
+
+const matches = () => {
+  const q = filter().toLowerCase();
+  return works.filter(w =>
+    w.name.toLowerCase().includes(q) || w.stack.join(' ').toLowerCase().includes(q)
+  );
+};
+
+const view = html`
+  <p class="meta">Setup function ran <span class="badge">${setupRuns}</span> time(s). Type below — it will stay at 1.</p>
+
+  <div class="row">
+    <button onclick=${() => count.set(count() + 1)}>Increment</button>
+    <span>Counter: <strong>${count}</strong></span>
+  </div>
+
+  <input placeholder="Filter by name or stack…" oninput=${e => filter.set(e.target.value)}>
+  <p class="meta">Showing ${() => matches().length} of ${works.length}</p>
+
+  ${() => matches().map(w => html`
+    <article class="card">
+      <h3>${w.name}</h3>
+      <div class="stack">${w.stack.join(' • ')}</div>
+      <a href=${w.url} target="_blank" rel="noopener">${w.url} →</a>
+    </article>
+  `)}
+
+  <p class="meta" style="margin-top:1.5rem">
+    <strong>What to notice:</strong> the setup-counter above stays at 1 forever.
+    Only the specific text nodes that read <code>count()</code>, <code>filter()</code>,
+    or <code>matches()</code> re-evaluate. The framework has no concept of "components re-rendering" — just signals notifying their subscribers.
+  </p>
+`;
+
+document.getElementById('app').append(view);
+</script>
+</body>
+</html>
