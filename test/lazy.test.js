@@ -115,5 +115,38 @@ describe('lazyComponent', () => {
       expect(errs.join('\n')).toMatch(/integrity check failed/);
       host.remove();
     });
+
+    it('refuses an http(s) source whose post-redirect origin is NOT in allowedOrigins', async () => {
+      // The pre-flight origin check (cheap, string-only) passes because the
+      // request URL is on the allowed host. We mock `fetch` to return a
+      // response whose `url` field points to a different (hostile) origin —
+      // simulating a 302 from the allowed CDN to an attacker. The
+      // post-fetch re-check must catch this and refuse to import.
+      const realTag = fresh('real');
+      const lazyTag = fresh('lazy');
+      const allowedSrc = 'https://allowed.example.com/widget.js';
+      const realFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        url: 'https://attacker.example.com/widget.js',
+        arrayBuffer: async () => new ArrayBuffer(0),
+      });
+      try {
+        lazyComponent({
+          tag: lazyTag, src: allowedSrc, as: realTag,
+          allowedOrigins: ['https://allowed.example.com'],
+        });
+        const errs = [];
+        const host = document.createElement(lazyTag);
+        host.addEventListener('lazy-error', (/** @type {any} */ e) => errs.push(e.detail.error.message));
+        document.body.append(host);
+        await tick(); await tick();
+        expect(errs.join('\n')).toMatch(/redirected to https:\/\/attacker\.example\.com/);
+        expect(errs.join('\n')).toMatch(/not in allowedOrigins/);
+        host.remove();
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+    });
   });
 });

@@ -54,6 +54,21 @@ const liveInstances = new Map();
  *  uses this to map a Custom Element tag back to its remote source. */
 export function _getRegistry() { return registry; }
 
+/** Devtools subscription so the overlay re-renders the moment a new
+ *  lazyComponent is registered, instead of polling. */
+/** @type {Set<() => void>} */
+const registryListeners = new Set();
+/** @param {() => void} fn @returns {() => void} */
+export function _onRegistryChange(fn) {
+  registryListeners.add(fn);
+  return () => registryListeners.delete(fn);
+}
+function notifyRegistryChange() {
+  for (const fn of [...registryListeners]) {
+    try { fn(); } catch { /* listener bugs don't propagate */ }
+  }
+}
+
 /**
  * Reload every connected instance of `src` (.retry() each one). Useful
  * for "the remote came back online, refresh my placeholders." Returns
@@ -159,6 +174,11 @@ export function lazyComponent({
 
       // Race the import against a configurable timeout. A hung CDN
       // would otherwise leave the placeholder visible forever.
+      // We attach a no-op .catch to importP so that if the timeout
+      // wins and importP later rejects, the rejection isn't surfaced
+      // as an unhandledrejection — the LazyElement already gave up.
+      if (timeout > 0) importP.catch(() => {});
+
       const racers = [importP];
       /** @type {ReturnType<typeof setTimeout> | null} */
       let timer = null;
@@ -216,49 +236,92 @@ export function lazyComponent({
   }
   customElements.define(tag, LazyElement);
   registry.set(tag, { src, realTag, registeredAt: Date.now() });
+  notifyRegistryChange();
   return LazyElement;
 }
 
 /** @param {string} src @param {{ integrity?: string; allowedOrigins?: string[] }} [opts] */
 async function verifiedImport(src, { integrity, allowedOrigins } = {}) {
-  if (allowedOrigins && allowedOrigins.length > 0) {
-    const url = new URL(src, /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/');
-    if (!allowedOrigins.includes(url.origin)) {
+  const hasAllowlist = !!(allowedOrigins && allowedOrigins.length > 0);
+  const baseHref = /** @type {any} */ (globalThis).location?.href ?? 'http://localhost/';
+  const preUrl = new URL(src, baseHref);
+  const canRedirect = preUrl.protocol === 'http:' || preUrl.protocol === 'https:';
+
+  // Pre-flight origin check on the request URL. For schemes where
+  // redirects are possible (http/https) it's only the first gate; we
+  // re-check post-fetch below to catch a redirect from an allowed
+  // origin to a hostile one. For data:/blob:/javascript: URLs there's
+  // no redirect path, so the pre-flight check is authoritative.
+  if (hasAllowlist) {
+    if (!(/** @type {string[]} */ (allowedOrigins)).includes(preUrl.origin)) {
       throw new Error(
-        `salmo: refusing to load ${src} — origin ${url.origin} ` +
-        `not in allowedOrigins (${allowedOrigins.join(', ')})`
+        `salmo: refusing to load ${src} — origin ${preUrl.origin} ` +
+        `not in allowedOrigins (${(/** @type {string[]} */ (allowedOrigins)).join(', ')})`
       );
     }
   }
-  if (!integrity) return import(src);
 
-  const m = /^(sha256|sha384|sha512)-(.+)$/.exec(integrity.trim());
-  if (!m) throw new Error(`salmo: unsupported integrity format: ${integrity}`);
-  const algoName = /** @type {'SHA-256'|'SHA-384'|'SHA-512'} */ (
-    { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' }[m[1]]
-  );
-  const expected = m[2];
+  // Fast path: nothing to verify post-fetch.
+  //   - no integrity AND no allowlist → direct dynamic import
+  //   - no integrity AND allowlist set BUT scheme can't redirect → pre-flight
+  //     already settled it, direct dynamic import
+  if (!integrity && (!hasAllowlist || !canRedirect)) return import(src);
 
+  // Slow path: fetch the bytes so we can (a) verify the post-redirect
+  // origin against the allowlist (http/https only), and (b) verify SRI
+  // on the actual bytes. We then import the verified bytes via a blob
+  // URL so what runs is exactly what we hashed/origin-checked.
   const res = await fetch(src);
   if (!res.ok) throw new Error(`salmo: fetch ${src} failed (${res.status})`);
-  const buf = await res.arrayBuffer();
-  const hashBuf = await /** @type {Crypto} */ (
-    /** @type {any} */ (globalThis).crypto
-  ).subtle.digest(algoName, buf);
-  const actual = arrayBufferToBase64(hashBuf);
-  if (actual !== expected) {
-    throw new Error(
-      `salmo: integrity check failed for ${src} ` +
-      `(expected ${algoName.toLowerCase()}-${expected}, got ${algoName.toLowerCase()}-${actual})`
-    );
+
+  if (hasAllowlist && canRedirect) {
+    const finalUrl = res.url;
+    if (!finalUrl) {
+      throw new Error(
+        `salmo: refusing to load ${src} — response is opaque, ` +
+        `cannot verify final origin against allowedOrigins`
+      );
+    }
+    const finalOrigin = new URL(finalUrl).origin;
+    if (!(/** @type {string[]} */ (allowedOrigins)).includes(finalOrigin)) {
+      throw new Error(
+        `salmo: refusing to load ${src} — redirected to ${finalOrigin}, ` +
+        `not in allowedOrigins (${(/** @type {string[]} */ (allowedOrigins)).join(', ')})`
+      );
+    }
   }
+
+  const buf = await res.arrayBuffer();
+
+  if (integrity) {
+    const m = /^(sha256|sha384|sha512)-(.+)$/.exec(integrity.trim());
+    if (!m) throw new Error(`salmo: unsupported integrity format: ${integrity}`);
+    const algoName = /** @type {'SHA-256'|'SHA-384'|'SHA-512'} */ (
+      { sha256: 'SHA-256', sha384: 'SHA-384', sha512: 'SHA-512' }[m[1]]
+    );
+    const expected = m[2];
+    const hashBuf = await /** @type {Crypto} */ (
+      /** @type {any} */ (globalThis).crypto
+    ).subtle.digest(algoName, buf);
+    const actual = arrayBufferToBase64(hashBuf);
+    if (actual !== expected) {
+      throw new Error(
+        `salmo: integrity check failed for ${src} ` +
+        `(expected ${algoName.toLowerCase()}-${expected}, got ${algoName.toLowerCase()}-${actual})`
+      );
+    }
+  }
+
   const blob = new Blob([buf], { type: 'text/javascript' });
   const blobUrl = URL.createObjectURL(blob);
-  try {
-    return await import(/* @vite-ignore */ blobUrl);
-  } finally {
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
-  }
+  // Intentionally NOT revoking the blob URL after import resolves.
+  // Static imports in the loaded module are resolved at parse time so
+  // revocation would be safe for them, but any dynamic `import()` inside
+  // the loaded module resolves relative to its own module URL — the
+  // blob URL — and would fail once the blob is gone. The memory cost
+  // per loaded remote (one O(module-size) blob retained) is negligible
+  // next to the loaded code itself.
+  return import(blobUrl);
 }
 
 /** @param {ArrayBuffer} buf */

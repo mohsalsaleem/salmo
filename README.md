@@ -68,7 +68,7 @@ No bundler. No build step. No node_modules in production. Open the file with a s
 | [`examples/dashboard/`](examples/dashboard/) | 100 federated cells, 60 FPS at 5×, perf stress with devtools overlay |
 | [`examples/federation/`](examples/federation/) | Host + remote bundles sharing a signal across the boundary |
 | [`examples/manifest/`](examples/manifest/) | Federation manifest explorer — paste a URL, see components, live-preview |
-| [`examples/ssr/`](examples/ssr/) | Server-render in Node, hydrate in browser, same component module |
+| [`examples/ssr/`](examples/ssr/) | Server-render in Node, client re-renders the same component module |
 | [`examples/notes/`](examples/notes/) | Fullstack — auth, SQLite, signed cookies, SSR, federated rich editor |
 | [`examples/router/`](examples/router/) | Routing as user-land signal — no framework primitive |
 | [`examples/security/`](examples/security/) | Trusted Types CSP enforcement in real chromium |
@@ -99,6 +99,7 @@ node examples/notes/e2e.mjs       # end-to-end test
 | Understand the federation model | [`FEDERATION.md`](FEDERATION.md) |
 | Handle auth in your app | [`AUTH.md`](AUTH.md) |
 | Manage global state | [`STATE.md`](STATE.md) |
+| Server-render and the road to hydration | [`SSR.md`](SSR.md) |
 | Audit the security posture | [`SECURITY.md`](SECURITY.md) |
 | LLM-friendly project summary | [`llms.txt`](llms.txt) |
 

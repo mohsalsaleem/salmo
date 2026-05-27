@@ -26,6 +26,11 @@ import { withScope } from './scope.js';
  * @property {(host: HTMLElement, props: Record<string, InstanceType<typeof Signal.State<unknown>>>, emit: (type: string, detail?: unknown) => void) => (() => TemplateResult) | TemplateResult | null | undefined} setup
  * @property {boolean} [shadow]
  * @property {readonly string[]} [props]
+ *   Names of observed HTML attributes mirrored into the props bag. Values
+ *   are always strings (or `undefined` when the attribute is absent) — the
+ *   Custom Elements platform exposes attributes as strings, and the
+ *   framework does not coerce them. If you need numbers/booleans/JSON,
+ *   parse inside `setup` (typically with a `Signal.Computed`).
  * @property {(err: Error, host: HTMLElement) => TemplateResult | Node | null} [onError]
  *   Error boundary. If setup() throws, or the render function throws
  *   on any (re)render, the framework calls onError(err, host) and
@@ -92,7 +97,15 @@ export function defineComponent({ tag, setup, shadow = false, props = [], onErro
 
     connectedCallback() {
       this.#controller = new AbortController();
-      this.#root = shadow ? this.attachShadow({ mode: 'open' }) : this;
+      // For shadow=true: respect an already-attached shadow root, which
+      // is how the browser hands us SSR'd <template shadowrootmode="open">
+      // content. Calling attachShadow again on a host that already has
+      // one throws — so reuse what's there. The first reactive render
+      // replaces the SSR'd shadow content with the live template, but
+      // the user has already seen styled content before JS booted.
+      this.#root = shadow
+        ? (this.shadowRoot ?? this.attachShadow({ mode: 'open' }))
+        : this;
       const root = this.#root;
       /** @type {(type: string, detail?: unknown) => void} */
       const emit = (type, detail) => {
