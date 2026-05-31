@@ -156,18 +156,26 @@ func TestRender_Attributes_AreSortedDeterministically(t *testing.T) {
 }
 
 func TestRender_Attributes_EscapeHTMLSpecials(t *testing.T) {
-	got, err := Render(context.Background(), labeled{role: `<script>&"'`, name: ""})
+	// Per WHATWG HTML serialization for double-quoted attribute
+	// values, only & and " require escaping. <, >, ' are spec-valid
+	// raw inside the value. This matches Node's renderer byte-for-byte.
+	got, err := Render(context.Background(), labeled{role: `<a>&"'`, name: ""})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// All five HTML5 specials in attribute values must be escaped.
-	if strings.Contains(string(got), `<script>`) {
-		t.Errorf("raw <script> appeared in attribute value: %s", got)
+	s := string(got)
+	if !strings.Contains(s, `&amp;`) {
+		t.Errorf("& must be escaped to &amp;, got: %s", s)
 	}
-	for _, esc := range []string{"&lt;", "&gt;", "&amp;", "&#34;", "&#39;"} {
-		if !strings.Contains(string(got), esc) {
-			t.Errorf("expected %q in escaped output, got: %s", esc, got)
-		}
+	if !strings.Contains(s, `&quot;`) {
+		t.Errorf(`" must be escaped to &quot;, got: %s`, s)
+	}
+	// <, >, ' stay raw inside the quoted attribute — confirm.
+	if !strings.Contains(s, `data-role="<a>`) {
+		t.Errorf("< should NOT be escaped inside double-quoted attr, got: %s", s)
+	}
+	if !strings.Contains(s, `'`) {
+		t.Errorf("' should NOT be escaped inside double-quoted attr, got: %s", s)
 	}
 }
 

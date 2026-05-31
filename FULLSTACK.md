@@ -122,6 +122,8 @@ These were real forks blocking implementation. Initial decisions are recorded be
 | DSD wire-format renderer (protocol rules 1–4) | v0 — 14/14 tests passing | [`server/dsd/`](server/dsd/) |
 | `Fragment` / `Page` http.Handler helpers | v0 — 13/13 tests passing | [`server/render/`](server/render/) |
 | Session interface + cookie+HMAC default | v0 — 14/14 tests passing | [`server/session/`](server/session/) |
+| Node↔Go wire-format parity tests | v0 — 4/4 cases, regen script via Node | [`server/dsd/parity_test.go`](server/dsd/parity_test.go) |
+| Minimal end-to-end example | v0 — Go server + DSD + client hydration | [`examples/server-hello/`](examples/server-hello/) |
 | Federation: manifest emission + JWT exchange | planned | `server/federation/` |
 | Hello-blog tutorial (sqlite + stdlib + raw SQL) | planned | `examples/blog-go/` |
 

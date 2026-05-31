@@ -126,18 +126,16 @@ func Render(ctx context.Context, c Component) (template.HTML, error) {
 	return template.HTML(b.String()), nil
 }
 
-// escapeAttr escapes the five HTML special characters in attribute
-// values. Matches template.HTMLEscapeString's set, repeated here so
-// the wire format stays decoupled from a specific stdlib helper —
-// canonical-byte parity with Salmo's Node renderer is the goal, and
-// freezing the escape set in this package makes that contract
-// testable.
+// escapeAttr escapes the two characters that MUST be escaped inside a
+// double-quoted HTML5 attribute value per WHATWG's serialization
+// algorithm: & (to disambiguate from entity refs) and " (which would
+// otherwise close the attribute). Left raw: <, >, ' — all spec-valid
+// inside a quoted attribute value, and matching the bytes Salmo's
+// Node renderer produces. Centralised here so the choice is one
+// edit if the canonical form ever changes.
 func escapeAttr(s string) string {
 	return strings.NewReplacer(
 		"&", "&amp;",
-		"<", "&lt;",
-		">", "&gt;",
-		`"`, "&#34;",
-		"'", "&#39;",
+		`"`, "&quot;",
 	).Replace(s)
 }

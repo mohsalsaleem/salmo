@@ -31,7 +31,14 @@ An implementation of this protocol — Node, Go, Ruby, Python, anything — must
 
 3. **Light-DOM children for default components.** If the component is not shadow-using, the implementation MAY emit the rendered children directly inside the host. The client runtime will replace them on first reactive render (today this is "re-render", not "hydration" — see below). Emitting children still wins on first-paint perceived performance.
 
-4. **HTML escaping.** All text and attribute values MUST be escaped per the HTML5 spec. The reference implementation uses happy-dom's serializer, which gets this right; a custom implementation must handle `&`, `<`, `>`, `"`, `'` (in attributes) and surrogate-pair safety.
+4. **HTML escaping.** Implementations follow WHATWG's HTML serialization algorithm, which uses *different* escape sets for text content and for double-quoted attribute values:
+
+   - **Text content:** escape `&` → `&amp;`, `<` → `&lt;`, `>` → `&gt;`. Leave `"` and `'` raw.
+   - **Double-quoted attribute values:** escape `&` → `&amp;` and `"` → `&quot;`. Leave `<`, `>`, `'` raw (they have no special meaning inside a quoted attribute).
+
+   The reference Node implementation uses happy-dom's serializer for both. The Go implementation in `server/dsd` does attribute escaping itself and pushes text-content escaping to the component author (who typically uses `html/template`, whose escape set is a superset of WHATWG's text-content set — that's spec-valid, just more bytes).
+
+   Implementations should also be surrogate-pair safe (don't split UTF-16 surrogates across writes).
 
 ### Required, post-v0.2.0 (full hydration)
 
@@ -51,6 +58,19 @@ When light-DOM hydration ships, the wire format gains two requirements:
 
 - **Stable host ID.** Either `id="…"` or `data-salmo-host="…"` to disambiguate when multiple instances of the same component appear on a page. Required if (6) is used.
 - **`hidden` attribute during initial paint** for components whose first render is significantly different from the SSR output, to avoid layout thrash. Removed once the client runtime takes over.
+
+### Cross-implementation parity — what "the same output" actually means
+
+Implementations are not required to produce byte-identical bytes for the same component shape. The promise the client runtime relies on is **semantic equivalence**: after browser parse, the resulting DOM trees match.
+
+In practice that means:
+
+- **HTML comments may differ.** lit-html emits `<!---->` and `<!--?lit$HASH$-->` markers as render-state bookkeeping. The Go renderer in `server/dsd` emits no comments. The browser strips comments before any framework code sees the DOM, so this is a no-op semantically.
+- **Whitespace within tags may differ.** A serializer might write `<p >` vs `<p>`; both parse to the same element.
+- **Attribute order may differ.** HTML attribute order is meaningless to the DOM. Implementations that want byte-stable output across runs (the Go renderer does) should sort lexicographically; implementations that don't (the Node renderer) are still spec-correct.
+- **Escape choices may differ between spec-valid options.** `&#34;` and `&quot;` both denote `"`. Implementations should pick one and document it — the parity test surface (`server/dsd/parity_test.go`) pins the choice for the canonical pair, against the Node reference output captured in `server/dsd/testdata/regen-parity.mjs`.
+
+If two implementations agree on rules (1)–(4) and the parity rules above, the client runtime will hydrate them identically. The Go renderer + Node renderer parity is tested on every Go test run; adding a new implementation means matching the same `wantNormalized` constants.
 
 ### Out of scope for the wire format
 
