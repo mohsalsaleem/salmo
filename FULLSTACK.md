@@ -120,7 +120,7 @@ These were real forks blocking implementation. Initial decisions are recorded be
 | Component | Status | Path |
 |---|---|---|
 | DSD wire-format renderer (protocol rules 1–4) | v0 — 14/14 tests passing | [`server/dsd/`](server/dsd/) |
-| `salmo.Render` http.Handler helper | planned | `server/render/` |
+| `Fragment` / `Page` http.Handler helpers | v0 — 13/13 tests passing | [`server/render/`](server/render/) |
 | Session interface (AUTH.md contract) | planned | `server/session/` |
 | Federation: manifest emission + JWT exchange | planned | `server/federation/` |
 | Hello-blog tutorial (sqlite + stdlib + raw SQL) | planned | `examples/blog-go/` |

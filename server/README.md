@@ -13,7 +13,7 @@ import "github.com/mohsalsaleem/salmo/server/dsd"
 | Package | What it does | Status |
 |---|---|---|
 | [`dsd/`](dsd/) | Renders Salmo components to the DSD wire format defined in [`../SSR.md`](../SSR.md). Implements protocol rules (1)–(4). | v0 — landed |
-| `render/` | `salmo.Render(w, component, props)` helper that drops into any `http.Handler`. | planned |
+| [`render/`](render/) | `Fragment` and `Page` helpers that drop into any `http.Handler`. Owns Content-Type + the HTML document scaffold. | v0 — landed |
 | `session/` | The session interface from `AUTH.md`. Cookie+HMAC default; swap Redis/Postgres/Valkey. | planned |
 | `federation/` | Server-side manifest emission + JWT exchange for Mode 3 cross-origin auth. | planned |
 
