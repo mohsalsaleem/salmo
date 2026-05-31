@@ -1,6 +1,10 @@
-# Server-side rendering — what works in v0.1.0, what's coming in v0.2.0
+# DSD hydration protocol — and the Node reference implementation
 
-Salmo's SSR story has two layers: a **happy-dom shim** that lets the same component module run unchanged on Node, and a **rendering pipeline** that produces the HTML the browser receives. v0.1.0 ships the first plus a first-paint win for shadow-DOM components (declarative shadow DOM). True hydration of light-DOM components — keeping the SSR'd nodes in place and attaching reactivity to them — is planned for v0.2.0.
+This doc is the **protocol spec** for how a server (any server, in any language) tells Salmo's client runtime to hydrate a server-rendered component. Salmo's Node renderer (`src/ssr.js`) is the **reference implementation** of the protocol; nothing in the spec itself is Node-specific. A Go server, a Ruby gem, a Python package, or a PHP composer package can implement the same wire format and Salmo's client runtime will hydrate the output without changes.
+
+This positioning matters because Salmo's three drop-in modes (see `FULLSTACK.md`) include "widget on someone else's page" and "federation host across stacks" — both of which need non-Salmo backends to be able to emit hydration-ready HTML if they want SSR. The protocol is the contract that makes that possible without coupling those backends to Salmo's Node code.
+
+The rest of this doc is structured as: (1) the **TL;DR** of what works today vs is planned; (2) the **wire format an implementation must emit** — the normative spec; (3) how the Node reference implementation does it; (4) the path to full hydration in v0.2.0; (5) costs and trade-offs.
 
 ## TL;DR — what to expect today
 
@@ -9,7 +13,52 @@ Salmo's SSR story has two layers: a **happy-dom shim** that lets the same compon
 | `shadow: true` | Host + `<template shadowrootmode="open">…</template>` (declarative shadow DOM) | Styled shadow content rendered by the browser **before any JS runs** | Framework reuses the same shadow root; first reactive `render()` replaces SSR'd content in place |
 | Default (light DOM) | Host + light-DOM children | Browser paints the SSR'd children | Framework clears the children and re-renders fresh (no hydration) |
 
-## How it works under the hood (v0.1.0)
+## Wire format — what an implementation must emit
+
+An implementation of this protocol — Node, Go, Ruby, Python, anything — must emit HTML that conforms to the following rules. Salmo's client runtime relies only on these rules; the implementation language and the rendering pipeline are otherwise free.
+
+### Required, today (v0.1.0)
+
+1. **Host element.** A custom-element tag whose name matches a `defineComponent({ tag })` registration on the client. Attributes set on the host are visible to the client as `host.attributes`; they MUST be safely HTML-escaped. Properties (those set via `host.foo = …` on the server) are NOT serialized — only attributes survive.
+
+2. **Shadow content for `shadow: true` components.** If the component is registered with `shadow: true`, the implementation MUST emit a single direct child:
+
+   ```html
+   <template shadowrootmode="open">…shadow tree…</template>
+   ```
+
+   The browser parser attaches the template's content as the host's open shadow root before any JS runs. Closed shadow roots are not serializable per the DSD spec; do not attempt to emit them. The client runtime checks `this.shadowRoot` in `connectedCallback` and reuses it if present.
+
+3. **Light-DOM children for default components.** If the component is not shadow-using, the implementation MAY emit the rendered children directly inside the host. The client runtime will replace them on first reactive render (today this is "re-render", not "hydration" — see below). Emitting children still wins on first-paint perceived performance.
+
+4. **HTML escaping.** All text and attribute values MUST be escaped per the HTML5 spec. The reference implementation uses happy-dom's serializer, which gets this right; a custom implementation must handle `&`, `<`, `>`, `"`, `'` (in attributes) and surrogate-pair safety.
+
+### Required, post-v0.2.0 (full hydration)
+
+When light-DOM hydration ships, the wire format gains two requirements:
+
+5. **lit-html structural markers.** The serialized HTML MUST contain `<!--lit-part HASH-->` and `<!--/lit-part-->` markers at the positions lit-html's `render` would have placed them. This is what lets the client `hydrate()` walk existing DOM and attach the part tree without recreating nodes. Implementations that aren't built on lit-html must reproduce the same marker shape; see the lit-html source for the exact algorithm.
+
+6. **Hydration state script.** For components whose `setup()` reads non-deterministic data (timestamps, fetched data, random IDs), the implementation MUST emit a sibling script with the data:
+
+   ```html
+   <script type="application/json" data-salmo-state="<host-id>">{"count":5,…}</script>
+   ```
+
+   Where `<host-id>` matches a stable identifier the implementation places on the host (the `id` attribute, or a `data-salmo-host` attribute). The client runtime parses this on `connectedCallback` and passes the object to `setup` as a fourth argument.
+
+### Not required, but recommended
+
+- **Stable host ID.** Either `id="…"` or `data-salmo-host="…"` to disambiguate when multiple instances of the same component appear on a page. Required if (6) is used.
+- **`hidden` attribute during initial paint** for components whose first render is significantly different from the SSR output, to avoid layout thrash. Removed once the client runtime takes over.
+
+### Out of scope for the wire format
+
+- The implementation's *internal* template language (JSX, ERB, Jinja, `html/template`, lit-html). The protocol only specifies the bytes that reach the browser.
+- How the implementation runs `setup()`. The Node reference uses happy-dom to actually instantiate the component; a Go implementation might transcribe a subset of the component's render contract to `html/template` and skip `setup()` entirely. Either is valid as long as the emitted HTML matches (1)–(6).
+- Streaming. The wire format is per-component; how an implementation streams multiple components into a single response (Suspense-style boundaries, server components, etc.) is not specified here. See `FEDERATION.md` — "Streaming SSR across remotes" is still open.
+
+## Reference implementation: Node (v0.1.0)
 
 `setupDOM()` installs `document`, `customElements`, `HTMLElement`, etc. as globals via happy-dom. `defineComponent(...)` then registers the element exactly as it would in a browser. `renderToString(tag, props)` creates a host, appends it to `document.body` (which fires `connectedCallback` and runs `setup`), then walks the live tree with a small custom serializer.
 
@@ -112,7 +161,17 @@ The biggest open question is whether `@lit-labs/ssr` should be vendored (preserv
 
 ## Status
 
-- v0.1.0 (this release): DSD for shadow-DOM components, custom serializer in `src/ssr.js`. Light-DOM SSR works (HTML is delivered, content is visible) but the client re-renders rather than hydrating.
-- v0.2.0 (planned): full lit-html-based hydration per the four pieces above, with an `examples/hydration/` demo proving DOM nodes are not replaced during client takeover.
+- v0.1.0 (this release): protocol rules (1)–(4) above. DSD for shadow-DOM components, custom serializer in `src/ssr.js`. Light-DOM SSR works (HTML is delivered, content is visible) but the client re-renders rather than hydrating.
+- v0.2.0 (planned): protocol rules (5)–(6) above. Full lit-html-based hydration per the four pieces in the previous section, with an `examples/hydration/` demo proving DOM nodes are not replaced during client takeover.
 
 If you depend on lit-html's marker-based diff updating SSR'd DOM in place today, you'll need to wait for v0.2.0 or stay on light-DOM with full re-render.
+
+## For implementers
+
+If you're porting this protocol to a non-Node ecosystem (Go server, Ruby gem, Python package, PHP composer package), the contract surface is small enough to fit on one page:
+
+- **You owe the browser:** HTML matching the wire format above. Rules (1)–(4) today; (5)–(6) once v0.2.0 ships.
+- **You owe Salmo's client runtime:** nothing beyond the HTML. The client runtime does not call back into your server during hydration.
+- **You don't owe a `setup()` runner.** The reference implementation uses happy-dom to run components on Node so the same module works both sides. A non-JS implementation can transcribe a subset of the component's render to its native template engine (`html/template`, ERB, Jinja) and skip `setup()` entirely — as long as the bytes match.
+
+The wire format is intentionally narrow so this stays true. If you find yourself needing to call into Salmo's JS to produce output, file an issue — the protocol probably has a gap that should be closed in the spec, not papered over in your port.

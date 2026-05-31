@@ -40,11 +40,13 @@ If `setup` returns the TemplateResult directly, it renders once and stays static
 2. `COOKBOOK.md` — task-indexed recipes for "how do I X?".
 3. `API.md` — every public export with type signature.
 4. `FEDERATION.md` — what makes federation first-class; manifest format; cross-framework matrix.
-5. `AUTH.md` — three patterns for auth (cookie / context provider / window-global). No auth library in src/.
-6. `STATE.md` — four patterns for state (module-level / atom / store-object / context provider). No store library in src/.
-7. `SECURITY.md` — threat model, mechanism-by-mechanism story, recommended CSP.
-8. `CHANGELOG.md` — what's in 0.1.0.
-9. `CONTRIBUTING.md` — what belongs in src/ vs examples/.
+5. `FULLSTACK.md` — the fullstack design rationale: what Salmo owns vs doesn't, three drop-in modes, why slices were rejected.
+6. `AUTH.md` — three patterns for auth (cookie / context provider / window-global). No auth library in src/.
+7. `STATE.md` — four patterns for state (module-level / atom / store-object / context provider). No store library in src/.
+8. `SSR.md` — the DSD hydration protocol spec; Node reference implementation; v0.2.0 full-hydration plan.
+9. `SECURITY.md` — threat model, mechanism-by-mechanism story, recommended CSP.
+10. `CHANGELOG.md` — what's in 0.1.0.
+11. `CONTRIBUTING.md` — what belongs in src/ vs examples/.
 
 ## Examples (each is a working demo under `examples/`)
 
