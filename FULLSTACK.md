@@ -121,7 +121,7 @@ These were real forks blocking implementation. Initial decisions are recorded be
 |---|---|---|
 | DSD wire-format renderer (protocol rules 1–4) | v0 — 14/14 tests passing | [`server/dsd/`](server/dsd/) |
 | `Fragment` / `Page` http.Handler helpers | v0 — 13/13 tests passing | [`server/render/`](server/render/) |
-| Session interface (AUTH.md contract) | planned | `server/session/` |
+| Session interface + cookie+HMAC default | v0 — 14/14 tests passing | [`server/session/`](server/session/) |
 | Federation: manifest emission + JWT exchange | planned | `server/federation/` |
 | Hello-blog tutorial (sqlite + stdlib + raw SQL) | planned | `examples/blog-go/` |
 

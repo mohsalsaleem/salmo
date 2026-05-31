@@ -14,7 +14,7 @@ import "github.com/mohsalsaleem/salmo/server/dsd"
 |---|---|---|
 | [`dsd/`](dsd/) | Renders Salmo components to the DSD wire format defined in [`../SSR.md`](../SSR.md). Implements protocol rules (1)–(4). | v0 — landed |
 | [`render/`](render/) | `Fragment` and `Page` helpers that drop into any `http.Handler`. Owns Content-Type + the HTML document scaffold. | v0 — landed |
-| `session/` | The session interface from `AUTH.md`. Cookie+HMAC default; swap Redis/Postgres/Valkey. | planned |
+| [`session/`](session/) | `Store[T]` interface (Get/Set/Destroy) + `CookieStore[T]` default with HMAC-SHA256 signing. Swap Redis/Postgres/Valkey by implementing `Store[T]`. | v0 — landed |
 | `federation/` | Server-side manifest emission + JWT exchange for Mode 3 cross-origin auth. | planned |
 
 Each package is independently useful — you can use `dsd` from a non-Salmo Go server today, and the framework deliberately stops there rather than bundling routing / DB / sessions opinions.
