@@ -97,9 +97,10 @@ node examples/notes/e2e.mjs       # end-to-end test
 | Build something today | [`COOKBOOK.md`](COOKBOOK.md) (recipe-indexed) |
 | See every export's signature | [`API.md`](API.md) |
 | Understand the federation model | [`FEDERATION.md`](FEDERATION.md) |
+| Understand the fullstack story (and what Salmo doesn't own) | [`FULLSTACK.md`](FULLSTACK.md) |
 | Handle auth in your app | [`AUTH.md`](AUTH.md) |
 | Manage global state | [`STATE.md`](STATE.md) |
-| Server-render and the road to hydration | [`SSR.md`](SSR.md) |
+| Server-render: the DSD hydration protocol + Node reference | [`SSR.md`](SSR.md) |
 | Audit the security posture | [`SECURITY.md`](SECURITY.md) |
 | LLM-friendly project summary | [`llms.txt`](llms.txt) |
 
