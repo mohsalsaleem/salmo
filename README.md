@@ -62,11 +62,12 @@ No bundler. No build step. No node_modules in production. Open the file with a s
 
 ## Server-side rendering with Go
 
-For teams that want a Go server tier, [`server/`](server/) provides three small packages that compose with any `http.Handler`:
+For teams that want a Go server tier, [`server/`](server/) provides four small packages that compose with any `http.Handler`:
 
 - [`server/dsd`](server/dsd/) — renders Salmo components to the DSD wire format defined in [`SSR.md`](SSR.md)
 - [`server/render`](server/render/) — `Fragment` (one component as response body) and `Page` (full HTML5 document) helpers
 - [`server/session`](server/session/) — `Store[T]` interface + a cookie+HMAC default; swap Redis/Postgres/Valkey by implementing `Store[T]`
+- [`server/federation`](server/federation/) — emit federation manifests for `loadFromManifest` to consume; HS256 JWT helpers for Mode 3 cross-origin auth
 
 ```go
 mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
