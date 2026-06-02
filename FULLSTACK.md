@@ -105,15 +105,27 @@ That preserves the unopinionated promise without leaving newcomers staring at a 
 
 ## Open questions
 
-These are real forks that block implementation, not just docs:
+These were real forks blocking implementation. Initial decisions are recorded below; revisit if a decision turns out wrong.
 
-1. **`salmo.Render` Go signature.** Component as `interface { Render(props) Template }` or as a struct with reflection on tags? The first is explicit; the second is more ergonomic but adds reflection cost. Needs a sketch + three example apps to decide.
+1. **`salmo.Render` Go signature.** *Decision:* explicit `interface { Render(ctx context.Context, props Props) (Template, error) }`. Reflection-on-tags is magic; explicit interfaces match the codebase ethos and are easier to debug. Live in `server/render/` (planned). The `Component` interface in `server/dsd/` is the prototype.
 
-2. **Cross-origin auth contract.** AUTH.md already covers single-origin patterns. For Mode 3 (federation host across stacks), the host's session cookie isn't on the remote's origin. Options: short-lived JWT exchange at federation load time, a postMessage-based auth bridge, or require remotes to authenticate independently. The federation security model (`FEDERATION.md`, supply-chain section) constrains this.
+2. **Cross-origin auth contract.** *Decision:* short-lived JWT exchange at federation load time. Host signs (HS256 with shared secret, or RS256 with JWKS); remote validates per request. postMessage bridge is fragile; "remote authenticates independently" defeats the SSO use case. JWT is the boring well-understood choice. Will land in `server/federation/`.
 
-3. **Streaming SSR across remotes.** `FEDERATION.md` flags this as still-open. The server-side stitching layer that fetches remote-rendered HTML and weaves it into the response stream is genuinely a separate project — not a small follow-up.
+3. **Streaming SSR across remotes.** *Decision:* defer entirely. Out of scope for v1; revisit only when a real use case forces it. Genuinely a separate project — keeping it on the radar in `FEDERATION.md` is enough for now.
 
-4. **ORM / router choice for the demo.** sqlite + stdlib is the default pick, but the tutorial-as-spec is itself a fork: does it show one stack deeply, or three stacks shallowly?
+4. **ORM / router choice for the demo.** *Decision:* one stack deeply — sqlite + stdlib `net/http` + raw SQL. Three shallow stacks would make newcomers think they have to learn all three. The hello-blog tutorial uses this stack; a "swap guide" appendix lists alternatives (chi/echo, pgx/sqlx/ent, etc.).
+
+## What's landed
+
+| Component | Status | Path |
+|---|---|---|
+| DSD wire-format renderer (protocol rules 1–4) | v0 — 14/14 tests passing | [`server/dsd/`](server/dsd/) |
+| `Fragment` / `Page` http.Handler helpers | v0 — 13/13 tests passing | [`server/render/`](server/render/) |
+| Session interface + cookie+HMAC default | v0 — 14/14 tests passing | [`server/session/`](server/session/) |
+| Node↔Go wire-format parity tests | v0 — 4/4 cases, regen script via Node | [`server/dsd/parity_test.go`](server/dsd/parity_test.go) |
+| Minimal end-to-end example | v0 — Go server + DSD + client hydration | [`examples/server-hello/`](examples/server-hello/) |
+| Federation: manifest emission + JWT exchange | planned | `server/federation/` |
+| Hello-blog tutorial (sqlite + stdlib + raw SQL) | planned | `examples/blog-go/` |
 
 ## What this doc is *not*
 

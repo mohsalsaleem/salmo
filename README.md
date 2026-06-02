@@ -60,6 +60,25 @@ The `@v0.1.0` tag pins to an immutable release. Bump to a newer tag to upgrade.
 
 No bundler. No build step. No node_modules in production. Open the file with a static server and it works.
 
+## Server-side rendering with Go
+
+For teams that want a Go server tier, [`server/`](server/) provides three small packages that compose with any `http.Handler`:
+
+- [`server/dsd`](server/dsd/) — renders Salmo components to the DSD wire format defined in [`SSR.md`](SSR.md)
+- [`server/render`](server/render/) — `Fragment` (one component as response body) and `Page` (full HTML5 document) helpers
+- [`server/session`](server/session/) — `Store[T]` interface + a cookie+HMAC default; swap Redis/Postgres/Valkey by implementing `Store[T]`
+
+```go
+mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+    render.Page(w, r, render.PageOpts{
+        Title:   "Demo",
+        Scripts: []string{"https://cdn.jsdelivr.net/gh/mohsalsaleem/salmo@v0.1.0/src/index.js"},
+    }, Greeting{Name: "Mo"})
+})
+```
+
+The framework deliberately doesn't own routing, ORM, or the session backend — see [`FULLSTACK.md`](FULLSTACK.md) for the long-form on what Salmo owns vs doesn't, the three drop-in modes (widget on someone else's page / full frontend / federation host), and why a slice abstraction was rejected. End-to-end demo: [`examples/server-hello/`](examples/server-hello/).
+
 ## Examples (every feature, end-to-end)
 
 | Example | What it shows |
@@ -74,6 +93,7 @@ No bundler. No build step. No node_modules in production. Open the file with a s
 | [`examples/security/`](examples/security/) | Trusted Types CSP enforcement in real chromium |
 | [`examples/styling/`](examples/styling/) | Light DOM + Shadow DOM + reactive `classMap` / `styleMap` |
 | [`examples/auth-provider/`](examples/auth-provider/) | Context-provider pattern — host shares auth + fetchAuthed with federated remote |
+| [`examples/server-hello/`](examples/server-hello/) | Go server renders DSD on first paint; client component hydrates via `server/dsd` + `server/render` |
 
 Run any of them:
 

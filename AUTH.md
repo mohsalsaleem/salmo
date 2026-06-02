@@ -1,6 +1,8 @@
 # Auth — what the framework does, what your app does
 
-This is a short reference for wiring authentication into apps built on salmo. **There is no auth module in `framework/src/`.** Auth is too app-specific to bundle. What we provide are the primitives (signals, context-via-closest, federation plumbing) and the patterns below — pick the one that fits your app.
+This is a short reference for wiring authentication into apps built on salmo. **There is no auth module in `framework/src/`** (the JS side). Auth is too app-specific to bundle. What we provide are the primitives (signals, context-via-closest, federation plumbing) and the patterns below — pick the one that fits your app.
+
+On the Go server side, [`server/session/`](server/session/) defines a small `Store[T]` interface (Get/Set/Destroy) with a cookie+HMAC default — same philosophy: framework owns the contract, app owns the policy. See `FULLSTACK.md` for how it composes with `server/render/`.
 
 ## TL;DR — who owns what
 
@@ -18,7 +20,9 @@ The principle: **framework owns the wiring, app owns the policy.**
 | OAuth / SSO flow | App |
 | Login / signup UI | App |
 | Role / permission checks at render time | App (uses `when()` + signals — nothing special needed) |
-| Server-side session validation | App |
+| Server-side session contract | Framework (`server/session.Store[T]`) |
+| Server-side session backend (cookie / Redis / Postgres) | App (cookie+HMAC default ships in `server/session`) |
+| Server-side session validation policy (expiry, rotation, audit) | App |
 
 ## Three patterns, by auth mechanism
 
