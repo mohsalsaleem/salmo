@@ -94,6 +94,7 @@ The framework deliberately doesn't own routing, ORM, or the session backend — 
 | [`examples/styling/`](examples/styling/) | Light DOM + Shadow DOM + reactive `classMap` / `styleMap` |
 | [`examples/auth-provider/`](examples/auth-provider/) | Context-provider pattern — host shares auth + fetchAuthed with federated remote |
 | [`examples/server-hello/`](examples/server-hello/) | Go server renders DSD on first paint; client component hydrates via `server/dsd` + `server/render` |
+| [`examples/blog-go/`](examples/blog-go/) | Full hello-blog tutorial — sqlite + raw SQL + sessions + `dsd` + `render`, server-rendered end-to-end |
 
 Run any of them:
 

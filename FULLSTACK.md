@@ -124,8 +124,8 @@ These were real forks blocking implementation. Initial decisions are recorded be
 | Session interface + cookie+HMAC default | v0 — 14/14 tests passing | [`server/session/`](server/session/) |
 | Node↔Go wire-format parity tests | v0 — 4/4 cases, regen script via Node | [`server/dsd/parity_test.go`](server/dsd/parity_test.go) |
 | Minimal end-to-end example | v0 — Go server + DSD + client hydration | [`examples/server-hello/`](examples/server-hello/) |
+| Hello-blog tutorial (sqlite + stdlib + raw SQL) | v0 — server-rendered, sessions, ~280 LOC main.go | [`examples/blog-go/`](examples/blog-go/) |
 | Federation: manifest emission + JWT exchange | planned | `server/federation/` |
-| Hello-blog tutorial (sqlite + stdlib + raw SQL) | planned | `examples/blog-go/` |
 
 ## What this doc is *not*
 
